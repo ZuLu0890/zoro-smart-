@@ -27,7 +27,7 @@ Optimised WASM artefacts are written to `target/wasm32-unknown-unknown/release/`
 cargo test --workspace
 ```
 
-Soroban test snapshots in `contracts/*/test_snapshots/test/*.json` are gitignored and regenerated locally on every `cargo test` run — if a fresh checkout fails on missing snapshots, set `INSTRUCTIONS_BUILD_TEST_SNAPSHOTS=true` to force write mode.
+Soroban test snapshots in `contracts/*/test_snapshots/test/*.json` are gitignored and regenerated locally on every `cargo test` run — if a fresh checkout fails on missing snapshots, run `INSTRUCTIONS_BUILD_TEST_SNAPSHOTS=true cargo test --workspace` to force write mode.
 
 ## Deploy
 
