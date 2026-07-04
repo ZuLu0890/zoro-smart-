@@ -25,8 +25,8 @@
 //! wrapped token it manages (the rwa-token pattern is reused for this trick).
 
 use soroban_sdk::{
-    contract, contractevent, contractimpl, contracttype, symbol_short, Address, Bytes, BytesN,
-    Env, Map, Vec,
+    contract, contractevent, contractimpl, contracttype, symbol_short, Address, Bytes, BytesN, Env,
+    Map, Vec,
 };
 
 // ============================================================================
@@ -80,8 +80,8 @@ pub struct DepositMessage {
     pub chain_id: u32,
     pub source_tx_hash: BytesN<32>,
     pub source_token: BytesN<32>,
-    pub sender: Bytes,        // 32-byte address of the source chain (opaque).
-    pub recipient: Address,    // Soroban recipient.
+    pub sender: Bytes,      // 32-byte address of the source chain (opaque).
+    pub recipient: Address, // Soroban recipient.
     pub amount: i128,
     pub nonce: u64,
 }
@@ -210,7 +210,11 @@ impl BridgeWrapper {
     ) -> Result<(), BridgeError> {
         Self::require_admin(&env)?;
         let key = Self::binding_key(&env, chain_id, &source_token);
-        if env.storage().persistent().has(&DataKey::TokenBinding(key.clone())) {
+        if env
+            .storage()
+            .persistent()
+            .has(&DataKey::TokenBinding(key.clone()))
+        {
             return Err(BridgeError::AlreadyProcessed);
         }
         env.storage()
@@ -225,14 +229,22 @@ impl BridgeWrapper {
 
     /// Verify `sigs` meet the threshold of *distinct* validators for
     /// `chain_id` and `deposit.source_token`, then mint.
-    pub fn wrap(env: Env, deposit: DepositMessage, sigs: Vec<ValidatorSig>) -> Result<(), BridgeError> {
+    pub fn wrap(
+        env: Env,
+        deposit: DepositMessage,
+        sigs: Vec<ValidatorSig>,
+    ) -> Result<(), BridgeError> {
         if deposit.amount <= 0 {
             return Err(BridgeError::MathOverflow);
         }
 
         // Replay guard.
         let dedup_key = Self::dedup_key(&env, deposit.chain_id, &deposit.source_tx_hash);
-        if env.storage().persistent().has(&DataKey::Processed(dedup_key.clone())) {
+        if env
+            .storage()
+            .persistent()
+            .has(&DataKey::Processed(dedup_key.clone()))
+        {
             return Err(BridgeError::AlreadyProcessed);
         }
 
@@ -322,11 +334,7 @@ impl BridgeWrapper {
 
     /// Burn `amount` of wrapped tokens; emit an event that the off-chain
     /// validators will pick up and release on the source chain.
-    pub fn unwrap(
-        env: Env,
-        sender: Address,
-        request: UnwrapRequest,
-    ) -> Result<(), BridgeError> {
+    pub fn unwrap(env: Env, sender: Address, request: UnwrapRequest) -> Result<(), BridgeError> {
         if request.amount <= 0 {
             return Err(BridgeError::MathOverflow);
         }

@@ -102,10 +102,7 @@ fn test_claimable_matches_balance_math() {
     // With yield_per_share == 0, claimable is 0 regardless of balance.
     assert_eq!(client.claimable(&holder), 0i128);
     // Direct call into the math helper with a synthetic balance.
-    assert_eq!(
-        client.claimable_with_balance(&holder, &10_000i128),
-        0i128
-    );
+    assert_eq!(client.claimable_with_balance(&holder, &10_000i128), 0i128);
 }
 
 #[test]

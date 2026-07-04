@@ -114,19 +114,17 @@ impl YieldDistributor {
         admin.require_auth();
         env.storage().instance().set(&DataKey::Admin, &admin);
         env.storage().instance().set(&DataKey::Funder, &funder);
-        env.storage().instance().set(&DataKey::ShareToken, &share_token);
+        env.storage()
+            .instance()
+            .set(&DataKey::ShareToken, &share_token);
         env.storage()
             .instance()
             .set(&DataKey::PaymentToken, &payment_token);
         env.storage()
             .instance()
             .set(&DataKey::YieldPerShare, &0i128);
-        env.storage()
-            .instance()
-            .set(&DataKey::TotalClaimed, &0i128);
-        env.storage()
-            .instance()
-            .set(&DataKey::LastFundedAt, &0u64);
+        env.storage().instance().set(&DataKey::TotalClaimed, &0i128);
+        env.storage().instance().set(&DataKey::LastFundedAt, &0u64);
         InitializedEvent {
             admin,
             funder,
@@ -252,9 +250,10 @@ impl YieldDistributor {
             .instance()
             .get(&DataKey::YieldPerShare)
             .unwrap_or(0i128);
-        env.storage()
-            .instance()
-            .set(&DataKey::YieldPerShare, &yps.checked_add(yps_delta).ok_or(YieldError::MathOverflow)?);
+        env.storage().instance().set(
+            &DataKey::YieldPerShare,
+            &yps.checked_add(yps_delta).ok_or(YieldError::MathOverflow)?,
+        );
         env.storage()
             .instance()
             .set(&DataKey::LastFundedAt, &env.ledger().timestamp());
@@ -295,9 +294,12 @@ impl YieldDistributor {
             .instance()
             .get(&DataKey::TotalClaimed)
             .unwrap_or(0i128);
-        env.storage()
-            .instance()
-            .set(&DataKey::TotalClaimed, &total.checked_add(claimable).ok_or(YieldError::MathOverflow)?);
+        env.storage().instance().set(
+            &DataKey::TotalClaimed,
+            &total
+                .checked_add(claimable)
+                .ok_or(YieldError::MathOverflow)?,
+        );
 
         ClaimedEvent {
             holder,

@@ -58,7 +58,7 @@ pub enum PanelTechnology {
 #[contracttype]
 #[derive(Clone, Debug)]
 pub struct GeoLocation {
-    pub latitude: i64,    // microdegrees (×10⁶) for precision
+    pub latitude: i64, // microdegrees (×10⁶) for precision
     pub longitude: i64,
     pub altitude_m: u32,
 }
@@ -287,11 +287,7 @@ impl SolarRegistry {
         env.storage()
             .persistent()
             .set(&DataKey::Array(id.clone()), &array);
-        ArrayUpdatedEvent {
-            id,
-            new_status,
-        }
-        .publish(&env);
+        ArrayUpdatedEvent { id, new_status }.publish(&env);
         Ok(())
     }
 

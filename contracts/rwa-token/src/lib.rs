@@ -9,8 +9,7 @@
 //! can mint shares sold in a crowdfunding round.
 
 use soroban_sdk::{
-    contract, contractevent, contractimpl, contracttype, symbol_short, Address, Env, String,
-    Symbol,
+    contract, contractevent, contractimpl, contracttype, symbol_short, Address, Env, String, Symbol,
 };
 
 // ============================================================================
@@ -142,7 +141,10 @@ impl RwaToken {
     // --------------------------------------------------------------------
 
     pub fn decimals(env: Env) -> u32 {
-        env.storage().instance().get(&DataKey::Decimals).unwrap_or(0)
+        env.storage()
+            .instance()
+            .get(&DataKey::Decimals)
+            .unwrap_or(0)
     }
 
     pub fn name(env: Env) -> String {
@@ -258,7 +260,12 @@ impl RwaToken {
         }
         env.storage().persistent().set(&key, &(allowance - amount));
         Self::move_balance(&env, &owner, &to, amount)?;
-        TransferEvent { from: owner, to, amount }.publish(&env);
+        TransferEvent {
+            from: owner,
+            to,
+            amount,
+        }
+        .publish(&env);
         Ok(())
     }
 
