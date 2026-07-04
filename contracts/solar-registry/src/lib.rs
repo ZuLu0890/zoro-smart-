@@ -17,7 +17,7 @@ use soroban_sdk::{
 // ============================================================================
 
 #[contracttype]
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RegistryError {
     NotInitialized = 1,
     AlreadyInitialized = 2,
@@ -41,6 +41,15 @@ impl From<soroban_sdk::Error> for RegistryError {
         // TODO: map specific host error codes back to RegistryError variants
         // once the soroban-sdk macro exposes the contract error code.
         RegistryError::Unauthorized
+    }
+}
+
+impl From<&RegistryError> for soroban_sdk::Error {
+    fn from(e: &RegistryError) -> Self {
+        // The `#[contractimpl]` macro in soroban-sdk v22 calls
+        // `Into<soroban_sdk::Error>` on error references, not values,
+        // when constructing the host error from a borrowed `Result`.
+        soroban_sdk::Error::from_contract_error(*e as u32)
     }
 }
 

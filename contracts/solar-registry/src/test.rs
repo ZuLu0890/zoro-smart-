@@ -1,7 +1,6 @@
-#![cfg(test)]
-
 use super::*;
-use soroban_sdk::{BytesN, Env, String};
+use soroban_sdk::testutils::Address as _;
+use soroban_sdk::{Address, BytesN, Env, String};
 
 fn make_array(env: &Env, id: BytesN<32>, operator: Address) -> SolarArray {
     SolarArray {

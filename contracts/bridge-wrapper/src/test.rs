@@ -1,7 +1,6 @@
-#![cfg(test)]
-
 use super::*;
-use soroban_sdk::{BytesN, Env};
+use soroban_sdk::testutils::Address as _;
+use soroban_sdk::{Address, BytesN, Env};
 
 #[test]
 fn test_initialize_stores_admin() {

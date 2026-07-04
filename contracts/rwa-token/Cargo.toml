@@ -8,14 +8,19 @@ repository.workspace = true
 description = "SEP-41 fungible token representing fractional ownership of a single urban solar array."
 
 [lib]
-crate-type = ["cdylib"]
+# Both "cdylib" (for Soroban WASM on-chain deployment) and "rlib" (so
+# that other workspace crates — e.g. yield-distributor's tests —
+# can `use rwa_token::RwaTokenClient;` / `use rwa_token::RwaToken;`
+# without Cargo silently omitting --extern linkage). Without "rlib",
+# the Rust compiler never receives a Rust-library artifact for
+# rwa-token, and cross-crate test imports fail with E0432/E0433 even
+# though `cargo build -p yield-distributor --lib` succeeds (because
+# yield-distributor's lib.rs only uses dynamic cross-contract calls,
+# so the dep isn't statically referenced in the library build).
+crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 soroban-sdk = { workspace = true }
 
 [dev-dependencies]
 soroban-sdk = { workspace = true, features = ["testutils"] }
-
-[[test]]
-name = "test"
-path = "src/test.rs"

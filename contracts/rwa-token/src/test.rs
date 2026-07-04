@@ -1,7 +1,6 @@
-#![cfg(test)]
-
 use super::*;
-use soroban_sdk::{Env, String};
+use soroban_sdk::testutils::Address as _;
+use soroban_sdk::{Address, Env, IntoVal, String};
 
 #[test]
 fn test_initialize_then_metadata() {
@@ -114,6 +113,8 @@ fn test_unauthorized_mint_rejected() {
             contract: &contract_id,
             fn_name: "mint",
             args: soroban_sdk::vec![&env, alice.into_val(&env), 1_000i128.into_val(&env)],
+            // soroban-sdk v22 requires explicit `sub_invokes` (default: empty).
+            sub_invokes: &[],
         },
     }]);
 

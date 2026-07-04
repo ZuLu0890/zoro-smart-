@@ -17,7 +17,7 @@ use soroban_sdk::{
 // ============================================================================
 
 #[contracttype]
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TokenError {
     /// Contract has not yet been initialised.
     NotInitialized = 1,
@@ -51,6 +51,17 @@ impl From<soroban_sdk::Error> for TokenError {
     }
 }
 
+impl From<&TokenError> for soroban_sdk::Error {
+    fn from(e: &TokenError) -> Self {
+        // The `#[contractimpl]` macro in soroban-sdk v22 calls
+        // `Into<soroban_sdk::Error>` on error references, not values,
+        // when constructing the host error from a borrowed `Result`.
+        // Without this impl the contract fails to compile with an
+        // E0277 trait-bound error.
+        soroban_sdk::Error::from_contract_error(*e as u32)
+    }
+}
+
 // ============================================================================
 // Storage keys
 // ============================================================================
@@ -78,7 +89,7 @@ pub enum DataKey {
 
 const EVT_MINT: soroban_sdk::Symbol = symbol_short!("mint");
 const EVT_BURN: soroban_sdk::Symbol = symbol_short!("burn");
-const EVT_TRANSFER: soroban_sdk::Symbol = symbol_short("transfer");
+const EVT_TRANSFER: soroban_sdk::Symbol = symbol_short!("transfer");
 const EVT_APPROVE: soroban_sdk::Symbol = symbol_short!("approve");
 
 // ============================================================================
@@ -198,8 +209,7 @@ impl RwaToken {
         }
         from.require_auth();
         Self::move_balance(&env, &from, &to, amount)?;
-        env.events()
-            .publish((EVT_TRANSFER, from, to), amount);
+        env.events().publish((EVT_TRANSFER, from, to), amount);
         Ok(())
     }
 
@@ -219,10 +229,8 @@ impl RwaToken {
         env.storage()
             .persistent()
             .set(&DataKey::Allowance(owner.clone(), spender.clone()), &amount);
-        env.events().publish(
-            (EVT_APPROVE, owner, spender),
-            (amount, expiration_ledger),
-        );
+        env.events()
+            .publish((EVT_APPROVE, owner, spender), (amount, expiration_ledger));
         Ok(())
     }
 
@@ -285,8 +293,7 @@ impl RwaToken {
         env.storage()
             .instance()
             .set(&DataKey::TotalSupply, &new_total);
-        env.events()
-            .publish((EVT_MINT, to), (operator, amount));
+        env.events().publish((EVT_MINT, to), (operator, amount));
         Ok(())
     }
 

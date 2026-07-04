@@ -21,7 +21,7 @@ use soroban_sdk::{contract, contractimpl, contracttype, symbol_short, token, Add
 // ============================================================================
 
 #[contracttype]
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum YieldError {
     NotInitialized = 1,
     AlreadyInitialized = 2,
@@ -48,6 +48,15 @@ impl From<soroban_sdk::Error> for YieldError {
         // TODO: map specific host error codes back to YieldError variants
         // once the soroban-sdk macro exposes the contract error code.
         YieldError::Unauthorized
+    }
+}
+
+impl From<&YieldError> for soroban_sdk::Error {
+    fn from(e: &YieldError) -> Self {
+        // The `#[contractimpl]` macro in soroban-sdk v22 calls
+        // `Into<soroban_sdk::Error>` on error references, not values,
+        // when constructing the host error from a borrowed `Result`.
+        soroban_sdk::Error::from_contract_error(*e as u32)
     }
 }
 
@@ -121,10 +130,8 @@ impl YieldDistributor {
             .set(&DataKey::YieldPerShare, &0i128);
         env.storage().instance().set(&DataKey::TotalClaimed, &0i128);
         env.storage().instance().set(&DataKey::LastFundedAt, &0u64);
-        env.events().publish(
-            (EVT_INIT,),
-            (admin, funder, share_token, payment_token),
-        );
+        env.events()
+            .publish((EVT_INIT,), (admin, funder, share_token, payment_token));
         Ok(())
     }
 
@@ -290,8 +297,7 @@ impl YieldDistributor {
                 .ok_or(YieldError::MathOverflow)?,
         );
 
-        env.events()
-            .publish((EVT_CLAIM, holder), claimable);
+        env.events().publish((EVT_CLAIM, holder), claimable);
         Ok(claimable)
     }
 

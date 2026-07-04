@@ -5,9 +5,10 @@
 //!
 //! Trust model
 //! ===========
+//!
 //! 1. Source-chain watcher(s) watch lock/transactions. For each lock, they
-//!    produce a signed message of the form:
-//!       (chain_id, source_tx_hash, sender, recipient, amount, nonce, dest_token)
+//!    produce a signed message of the form
+//!    `(chain_id, source_tx_hash, sender, recipient, amount, nonce, dest_token)`.
 //! 2. A threshold set of validators signs each message.
 //! 3. The user (or relayer) submits that signed message to `wrap(...)` on the
 //!    Stellar bridge-wrapper. If the threshold of distinct validator
@@ -33,7 +34,7 @@ use soroban_sdk::{
 // ============================================================================
 
 #[contracttype]
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum BridgeError {
     NotInitialized = 1,
     AlreadyInitialized = 2,
@@ -60,6 +61,15 @@ impl From<soroban_sdk::Error> for BridgeError {
         // TODO: map specific host error codes back to BridgeError variants
         // once the soroban-sdk macro exposes the contract error code.
         BridgeError::Unauthorized
+    }
+}
+
+impl From<&BridgeError> for soroban_sdk::Error {
+    fn from(e: &BridgeError) -> Self {
+        // The `#[contractimpl]` macro in soroban-sdk v22 calls
+        // `Into<soroban_sdk::Error>` on error references, not values,
+        // when constructing the host error from a borrowed `Result`.
+        soroban_sdk::Error::from_contract_error(*e as u32)
     }
 }
 

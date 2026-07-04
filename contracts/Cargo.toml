@@ -15,7 +15,13 @@ authors = ["SolShare Network Contributors"]
 repository = "https://github.com/solshare-network/solshare-network"
 
 [workspace.dependencies]
-soroban-sdk = { version = "22.0.0", features = ["testutils"] }
+# NOTE: the `testutils` feature is intentionally NOT enabled at the
+# workspace level — enabling it pulls `serde_json` and `rand` (and other
+# host-only deps) into the dependency graph, which Cargo then tries to
+# build for `wasm32-unknown-unknown` and aborts with a `compile_error!`
+# inside soroban-sdk. Each contract enables `testutils` ONLY in its
+# own `[dev-dependencies]` (where it stays off the WASM target).
+soroban-sdk = { version = "22.0.0" }
 soroban-token-sdk = { version = "22.0.0" }
 
 [profile.release]

@@ -1,14 +1,21 @@
-#![cfg(test)]
-
 use super::*;
-use soroban_sdk::{Env, String};
+// Bring `RwaToken` (the deployable contract struct) and the
+// `rwa_token::RwaTokenClient` cross-crate binding into scope. The
+// neighbouring `use super::*;` only pulls from this crate's
+// `lib.rs` (which doesn't reference RwaToken directly); the rwa-token
+// dep supplies the contract struct we register with `env.register`.
+use rwa_token::RwaToken;
+use soroban_sdk::testutils::Address as _;
+use soroban_sdk::{Address, Env, String};
 
 /// Register a fresh rwa-token contract, initialize it, and (optionally)
 /// mint to `holder`. Returns the deployed token's address so it can be
 /// wired into the yield-distributor as the `share_token`.
 fn deploy_rwa_token_with_supply(env: &Env, holder: &Address, supply: i128) -> Address {
     let rwa_id = env.register(RwaToken, ());
-    let rwa_addr = rwa_id.address();
+    // soroban-sdk v22: env.register returns Address directly (no .address()
+    // extraction step). rwa_id is itself the deployed contract address.
+    let rwa_addr = rwa_id;
     let client = rwa_token::RwaTokenClient::new(env, &rwa_addr);
     let admin = Address::generate(env);
     let operator = Address::generate(env);
