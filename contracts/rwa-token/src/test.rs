@@ -1,17 +1,17 @@
 #![cfg(test)]
 
 use super::*;
-use soroban_sdk::{testutils::Address as _, Env, String};
+use soroban_sdk::{Env, String};
 
 #[test]
 fn test_initialize_then_metadata() {
     let env = Env::default();
     env.mock_all_auths();
-    let contract_id = env.register_contract(None, RwaToken);
+    let contract_id = env.register(RwaToken, ());
     let admin = Address::generate(&env);
     let operator = Address::generate(&env);
 
-    let client = RwaTokenContractClient::new(&env, &contract_id);
+    let client = RwaTokenClient::new(&env, &contract_id);
     client.initialize(
         &admin,
         &operator,
@@ -35,10 +35,10 @@ fn test_initialize_then_metadata() {
 fn test_double_initialize_errors() {
     let env = Env::default();
     env.mock_all_auths();
-    let contract_id = env.register_contract(None, RwaToken);
+    let contract_id = env.register(RwaToken, ());
     let admin = Address::generate(&env);
     let operator = Address::generate(&env);
-    let client = RwaTokenContractClient::new(&env, &contract_id);
+    let client = RwaTokenClient::new(&env, &contract_id);
     client.initialize(
         &admin,
         &operator,
@@ -60,13 +60,13 @@ fn test_double_initialize_errors() {
 fn test_mint_transfer_burn_flow() {
     let env = Env::default();
     env.mock_all_auths();
-    let contract_id = env.register_contract(None, RwaToken);
+    let contract_id = env.register(RwaToken, ());
     let admin = Address::generate(&env);
     let operator = Address::generate(&env);
     let alice = Address::generate(&env);
     let bob = Address::generate(&env);
 
-    let client = RwaTokenContractClient::new(&env, &contract_id);
+    let client = RwaTokenClient::new(&env, &contract_id);
     client.initialize(
         &admin,
         &operator,
@@ -92,13 +92,13 @@ fn test_mint_transfer_burn_flow() {
 fn test_unauthorized_mint_rejected() {
     let env = Env::default();
     env.mock_all_auths();
-    let contract_id = env.register_contract(None, RwaToken);
+    let contract_id = env.register(RwaToken, ());
     let admin = Address::generate(&env);
     let operator = Address::generate(&env);
     let alice = Address::generate(&env);
     let imposter = Address::generate(&env);
 
-    let client = RwaTokenContractClient::new(&env, &contract_id);
+    let client = RwaTokenClient::new(&env, &contract_id);
     client.initialize(
         &admin,
         &operator,
@@ -125,14 +125,14 @@ fn test_unauthorized_mint_rejected() {
 fn test_approve_and_transfer_from() {
     let env = Env::default();
     env.mock_all_auths();
-    let contract_id = env.register_contract(None, RwaToken);
+    let contract_id = env.register(RwaToken, ());
     let admin = Address::generate(&env);
     let operator = Address::generate(&env);
     let alice = Address::generate(&env);
     let bob = Address::generate(&env);
     let spender = Address::generate(&env);
 
-    let client = RwaTokenContractClient::new(&env, &contract_id);
+    let client = RwaTokenClient::new(&env, &contract_id);
     client.initialize(
         &admin,
         &operator,
@@ -158,11 +158,11 @@ fn test_approve_and_transfer_from() {
 fn test_set_operator_admin_only() {
     let env = Env::default();
     env.mock_all_auths();
-    let contract_id = env.register_contract(None, RwaToken);
+    let contract_id = env.register(RwaToken, ());
     let admin = Address::generate(&env);
     let operator = Address::generate(&env);
     let new_operator = Address::generate(&env);
-    let client = RwaTokenContractClient::new(&env, &contract_id);
+    let client = RwaTokenClient::new(&env, &contract_id);
     client.initialize(
         &admin,
         &operator,

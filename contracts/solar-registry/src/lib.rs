@@ -9,8 +9,7 @@
 //!   `Decommissioned` — physical removal; admin-signed only.
 
 use soroban_sdk::{
-    contract, contractevent, contractimpl, contracttype, symbol_short, Address, BytesN, Env,
-    String, Vec,
+    contract, contractimpl, contracttype, symbol_short, Address, BytesN, Env, String, Vec,
 };
 
 // ============================================================================
@@ -27,6 +26,22 @@ pub enum RegistryError {
     ArrayAlreadyExists = 5,
     InvalidStateTransition = 6,
     EmptyArrayId = 7,
+}
+
+impl From<RegistryError> for soroban_sdk::Error {
+    fn from(e: RegistryError) -> Self {
+        // TODO: surface a typed error code in the host error once the
+        // soroban-sdk macro exposes the variant discriminant directly.
+        soroban_sdk::Error::from_contract_error(e as u32)
+    }
+}
+
+impl From<soroban_sdk::Error> for RegistryError {
+    fn from(_e: soroban_sdk::Error) -> Self {
+        // TODO: map specific host error codes back to RegistryError variants
+        // once the soroban-sdk macro exposes the contract error code.
+        RegistryError::Unauthorized
+    }
 }
 
 // ============================================================================
@@ -108,30 +123,11 @@ pub enum DataKey {
 }
 
 // ============================================================================
-// Events
+// Event topic constants
 // ============================================================================
 
-#[contractevent]
-pub struct ArrayRegisteredEvent {
-    #[topic]
-    pub id: BytesN<32>,
-    pub operator: Address,
-    pub rated_capacity_w: u64,
-}
-
-#[contractevent]
-pub struct ArrayUpdatedEvent {
-    #[topic]
-    pub id: BytesN<32>,
-    pub new_status: ArrayStatus,
-}
-
-#[contractevent]
-pub struct ArrayDecommissionedEvent {
-    #[topic]
-    pub id: BytesN<32>,
-    pub reason: String,
-}
+const EVT_REGISTER: soroban_sdk::Symbol = symbol_short!("register");
+const EVT_UPDATE: soroban_sdk::Symbol = symbol_short!("update");
 
 // ============================================================================
 // Contract
@@ -234,12 +230,10 @@ impl SolarRegistry {
         index.push_back(array.id.clone());
         env.storage().instance().set(&DataKey::Index, &index);
 
-        ArrayRegisteredEvent {
-            id: array.id,
-            operator: array.operator,
-            rated_capacity_w: array.rated_capacity_w,
-        }
-        .publish(&env);
+        env.events().publish(
+            (EVT_REGISTER, array.id),
+            (array.operator, array.rated_capacity_w),
+        );
         Ok(())
     }
 
@@ -287,7 +281,7 @@ impl SolarRegistry {
         env.storage()
             .persistent()
             .set(&DataKey::Array(id.clone()), &array);
-        ArrayUpdatedEvent { id, new_status }.publish(&env);
+        env.events().publish((EVT_UPDATE, id), new_status);
         Ok(())
     }
 

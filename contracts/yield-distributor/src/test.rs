@@ -1,15 +1,15 @@
 #![cfg(test)]
 
 use super::*;
-use soroban_sdk::{testutils::Address as _, Env, String};
+use soroban_sdk::{Env, String};
 
 /// Register a fresh rwa-token contract, initialize it, and (optionally)
 /// mint to `holder`. Returns the deployed token's address so it can be
 /// wired into the yield-distributor as the `share_token`.
 fn deploy_rwa_token_with_supply(env: &Env, holder: &Address, supply: i128) -> Address {
-    let rwa_id = env.register_contract(None, RwaToken);
+    let rwa_id = env.register(RwaToken, ());
     let rwa_addr = rwa_id.address();
-    let client = rwa_token::RwaTokenContractClient::new(env, &rwa_addr);
+    let client = rwa_token::RwaTokenClient::new(env, &rwa_addr);
     let admin = Address::generate(env);
     let operator = Address::generate(env);
     env.mock_all_auths();
@@ -30,13 +30,13 @@ fn deploy_rwa_token_with_supply(env: &Env, holder: &Address, supply: i128) -> Ad
 fn test_initialize_stores_roles() {
     let env = Env::default();
     env.mock_all_auths();
-    let contract_id = env.register_contract(None, YieldDistributor);
+    let contract_id = env.register(YieldDistributor, ());
     let admin = Address::generate(&env);
     let funder = Address::generate(&env);
     let share_token = Address::generate(&env);
     let payment_token = Address::generate(&env);
 
-    let client = YieldDistributorContractClient::new(&env, &contract_id);
+    let client = YieldDistributorClient::new(&env, &contract_id);
     client.initialize(&admin, &funder, &share_token, &payment_token);
 
     assert_eq!(client.share_token(), share_token);
@@ -49,13 +49,13 @@ fn test_initialize_stores_roles() {
 fn test_double_initialize_errors() {
     let env = Env::default();
     env.mock_all_auths();
-    let contract_id = env.register_contract(None, YieldDistributor);
+    let contract_id = env.register(YieldDistributor, ());
     let admin = Address::generate(&env);
     let funder = Address::generate(&env);
     let share_token = Address::generate(&env);
     let payment_token = Address::generate(&env);
 
-    let client = YieldDistributorContractClient::new(&env, &contract_id);
+    let client = YieldDistributorClient::new(&env, &contract_id);
     client.initialize(&admin, &funder, &share_token, &payment_token);
     let res = client.try_initialize(&admin, &funder, &share_token, &payment_token);
     assert!(res.is_err());
@@ -67,14 +67,14 @@ fn test_claim_with_no_yield_errors() {
     // `NothingToClaim` rather than zeroing out the holder's book-keeping.
     let env = Env::default();
     env.mock_all_auths();
-    let contract_id = env.register_contract(None, YieldDistributor);
+    let contract_id = env.register(YieldDistributor, ());
     let admin = Address::generate(&env);
     let funder = Address::generate(&env);
     let payment_token = Address::generate(&env);
     let holder = Address::generate(&env);
 
     let share_token = deploy_rwa_token_with_supply(&env, &holder, 100);
-    let client = YieldDistributorContractClient::new(&env, &contract_id);
+    let client = YieldDistributorClient::new(&env, &contract_id);
     client.initialize(&admin, &funder, &share_token, &payment_token);
 
     let res = client.try_claim(&holder);
@@ -89,14 +89,14 @@ fn test_claimable_matches_balance_math() {
     // reads. We confirm the no-yield case returns 0 cleanly.
     let env = Env::default();
     env.mock_all_auths();
-    let contract_id = env.register_contract(None, YieldDistributor);
+    let contract_id = env.register(YieldDistributor, ());
     let admin = Address::generate(&env);
     let funder = Address::generate(&env);
     let payment_token = Address::generate(&env);
     let holder = Address::generate(&env);
 
     let share_token = deploy_rwa_token_with_supply(&env, &holder, 100);
-    let client = YieldDistributorContractClient::new(&env, &contract_id);
+    let client = YieldDistributorClient::new(&env, &contract_id);
     client.initialize(&admin, &funder, &share_token, &payment_token);
 
     // With yield_per_share == 0, claimable is 0 regardless of balance.
@@ -109,14 +109,14 @@ fn test_claimable_matches_balance_math() {
 fn test_set_funder_admin_only() {
     let env = Env::default();
     env.mock_all_auths();
-    let contract_id = env.register_contract(None, YieldDistributor);
+    let contract_id = env.register(YieldDistributor, ());
     let admin = Address::generate(&env);
     let funder = Address::generate(&env);
     let new_funder = Address::generate(&env);
     let share_token = Address::generate(&env);
     let payment_token = Address::generate(&env);
 
-    let client = YieldDistributorContractClient::new(&env, &contract_id);
+    let client = YieldDistributorClient::new(&env, &contract_id);
     client.initialize(&admin, &funder, &share_token, &payment_token);
     client.set_funder(&new_funder);
 

@@ -9,7 +9,7 @@
 //! can mint shares sold in a crowdfunding round.
 
 use soroban_sdk::{
-    contract, contractevent, contractimpl, contracttype, symbol_short, Address, Env, String, Symbol,
+    contract, contractimpl, contracttype, symbol_short, Address, Env, String, Symbol,
 };
 
 // ============================================================================
@@ -35,6 +35,22 @@ pub enum TokenError {
     ZeroAmount = 7,
 }
 
+impl From<TokenError> for soroban_sdk::Error {
+    fn from(e: TokenError) -> Self {
+        // TODO: surface a typed error code in the host error once the
+        // soroban-sdk macro exposes the variant discriminant directly.
+        soroban_sdk::Error::from_contract_error(e as u32)
+    }
+}
+
+impl From<soroban_sdk::Error> for TokenError {
+    fn from(_e: soroban_sdk::Error) -> Self {
+        // TODO: map specific host error codes back to TokenError variants
+        // once the soroban-sdk macro exposes the contract error code.
+        TokenError::Unauthorized
+    }
+}
+
 // ============================================================================
 // Storage keys
 // ============================================================================
@@ -57,42 +73,13 @@ pub enum DataKey {
 }
 
 // ============================================================================
-// Events
+// Event topic constants
 // ============================================================================
 
-#[contractevent]
-pub struct MintEvent {
-    #[topic]
-    pub to: Address,
-    pub admin: Address,
-    pub amount: i128,
-}
-
-#[contractevent]
-pub struct BurnEvent {
-    #[topic]
-    pub from: Address,
-    pub amount: i128,
-}
-
-#[contractevent]
-pub struct TransferEvent {
-    #[topic]
-    pub from: Address,
-    #[topic]
-    pub to: Address,
-    pub amount: i128,
-}
-
-#[contractevent]
-pub struct ApproveEvent {
-    #[topic]
-    pub from: Address,
-    #[topic]
-    pub spender: Address,
-    pub amount: i128,
-    pub expiration_ledger: u32,
-}
+const EVT_MINT: soroban_sdk::Symbol = symbol_short!("mint");
+const EVT_BURN: soroban_sdk::Symbol = symbol_short!("burn");
+const EVT_TRANSFER: soroban_sdk::Symbol = symbol_short("transfer");
+const EVT_APPROVE: soroban_sdk::Symbol = symbol_short!("approve");
 
 // ============================================================================
 // Contract
@@ -211,7 +198,8 @@ impl RwaToken {
         }
         from.require_auth();
         Self::move_balance(&env, &from, &to, amount)?;
-        TransferEvent { from, to, amount }.publish(&env);
+        env.events()
+            .publish((EVT_TRANSFER, from, to), amount);
         Ok(())
     }
 
@@ -231,13 +219,10 @@ impl RwaToken {
         env.storage()
             .persistent()
             .set(&DataKey::Allowance(owner.clone(), spender.clone()), &amount);
-        ApproveEvent {
-            from: owner,
-            to: spender,
-            amount,
-            expiration_ledger,
-        }
-        .publish(&env);
+        env.events().publish(
+            (EVT_APPROVE, owner, spender),
+            (amount, expiration_ledger),
+        );
         Ok(())
     }
 
@@ -260,12 +245,7 @@ impl RwaToken {
         }
         env.storage().persistent().set(&key, &(allowance - amount));
         Self::move_balance(&env, &owner, &to, amount)?;
-        TransferEvent {
-            from: owner,
-            to,
-            amount,
-        }
-        .publish(&env);
+        env.events().publish((EVT_TRANSFER, owner, to), amount);
         Ok(())
     }
 
@@ -279,7 +259,7 @@ impl RwaToken {
         if amount <= 0 {
             return Err(TokenError::ZeroAmount);
         }
-        let operator = env
+        let operator: Address = env
             .storage()
             .instance()
             .get(&DataKey::Operator)
@@ -305,12 +285,8 @@ impl RwaToken {
         env.storage()
             .instance()
             .set(&DataKey::TotalSupply, &new_total);
-        MintEvent {
-            to,
-            admin: operator,
-            amount,
-        }
-        .publish(&env);
+        env.events()
+            .publish((EVT_MINT, to), (operator, amount));
         Ok(())
     }
 
@@ -339,7 +315,7 @@ impl RwaToken {
         env.storage()
             .instance()
             .set(&DataKey::TotalSupply, &(total - amount));
-        BurnEvent { from, amount }.publish(&env);
+        env.events().publish((EVT_BURN, from), amount);
         Ok(())
     }
 

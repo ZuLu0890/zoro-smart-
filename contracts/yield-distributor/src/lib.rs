@@ -14,9 +14,7 @@
 //! The pull-payment model avoids the O(N) iteration cost of push payments on
 //! every deposit, and lets holders claim when convenient.
 
-use soroban_sdk::{
-    contract, contractevent, contractimpl, contracttype, symbol_short, token, Address, Env,
-};
+use soroban_sdk::{contract, contractimpl, contracttype, symbol_short, token, Address, Env};
 
 // ============================================================================
 // Errors
@@ -35,6 +33,22 @@ pub enum YieldError {
     /// Nothing currently claimable for `holder`.
     NothingToClaim = 6,
     MathOverflow = 7,
+}
+
+impl From<YieldError> for soroban_sdk::Error {
+    fn from(e: YieldError) -> Self {
+        // TODO: surface a typed error code in the host error once the
+        // soroban-sdk macro exposes the variant discriminant directly.
+        soroban_sdk::Error::from_contract_error(e as u32)
+    }
+}
+
+impl From<soroban_sdk::Error> for YieldError {
+    fn from(_e: soroban_sdk::Error) -> Self {
+        // TODO: map specific host error codes back to YieldError variants
+        // once the soroban-sdk macro exposes the contract error code.
+        YieldError::Unauthorized
+    }
 }
 
 // ============================================================================
@@ -63,30 +77,12 @@ pub enum DataKey {
 }
 
 // ============================================================================
-// Events
+// Event topic constants
 // ============================================================================
 
-#[contractevent]
-pub struct InitializedEvent {
-    pub admin: Address,
-    pub funder: Address,
-    pub share_token: Address,
-    pub payment_token: Address,
-}
-
-#[contractevent]
-pub struct FundedEvent {
-    pub from: Address,
-    pub amount: i128,
-    pub total_yield_per_share: i128,
-}
-
-#[contractevent]
-pub struct ClaimedEvent {
-    #[topic]
-    pub holder: Address,
-    pub amount: i128,
-}
+const EVT_INIT: soroban_sdk::Symbol = symbol_short!("init");
+const EVT_FUND: soroban_sdk::Symbol = symbol_short!("fund");
+const EVT_CLAIM: soroban_sdk::Symbol = symbol_short!("claim");
 
 // ============================================================================
 // Contract
@@ -125,13 +121,10 @@ impl YieldDistributor {
             .set(&DataKey::YieldPerShare, &0i128);
         env.storage().instance().set(&DataKey::TotalClaimed, &0i128);
         env.storage().instance().set(&DataKey::LastFundedAt, &0u64);
-        InitializedEvent {
-            admin,
-            funder,
-            share_token,
-            payment_token,
-        }
-        .publish(&env);
+        env.events().publish(
+            (EVT_INIT,),
+            (admin, funder, share_token, payment_token),
+        );
         Ok(())
     }
 
@@ -257,12 +250,8 @@ impl YieldDistributor {
         env.storage()
             .instance()
             .set(&DataKey::LastFundedAt, &env.ledger().timestamp());
-        FundedEvent {
-            from: funder,
-            amount,
-            total_yield_per_share: yps + yps_delta,
-        }
-        .publish(&env);
+        env.events()
+            .publish((EVT_FUND, funder), (amount, yps + yps_delta));
         Ok(())
     }
 
@@ -301,11 +290,8 @@ impl YieldDistributor {
                 .ok_or(YieldError::MathOverflow)?,
         );
 
-        ClaimedEvent {
-            holder,
-            amount: claimable,
-        }
-        .publish(&env);
+        env.events()
+            .publish((EVT_CLAIM, holder), claimable);
         Ok(claimable)
     }
 
