@@ -225,7 +225,10 @@ Progress / Review / Done columns). The gh CLI integration used by
 scope, so it creates the milestones + status labels + initial
 assignments but stops short of the board itself. The script is
 idempotent: once the board exists, re-run it to populate the
-columns.
+columns. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the full
+**Project bootstrap scripts** section (prerequisites, idempotency
+caveats, and the `create-issues.sh` companion script for re-creating
+the curated issue backlog from `docs/issues/`).
 
 ## Deploy
 

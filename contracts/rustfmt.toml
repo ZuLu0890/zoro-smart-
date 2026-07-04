@@ -1,20 +1,18 @@
 # contracts/rustfmt.toml
 #
-# Pin formatting to the rustfmt defaults that were current when the
-# contracts were last formatted, so contributors on stable and nightly
-# rustfmt produce byte-identical output to what CI expects.
+# Pin only the `edition` so contributors on stable and nightly rustfmt
+# agree on which Rust edition's syntax to use when formatting. All
+# other options (`max_width`, `tab_spaces`, `newline_style`,
+# `use_small_heuristics`, etc.) are left at whatever rustfmt defaults
+# to for the installed toolchain — pinning `max_width` here would
+# either be redundant (if CI's rustfmt already defaults to 100) or
+# actively break CI (if CI's rustfmt defaults to 120, which is the
+# rustfmt 1.6+ default). The edition pin is the only setting whose
+# value *must* match the workspace `Cargo.toml` `edition = "2021"`.
 #
-# Only stable-supported options are set; any unstable option (e.g.
+# No unstable options are set: any unstable option (e.g.
 # `imports_granularity`, `format_strings`, `wrap_comments`,
-# `condense_wildcard_suffixes`) would silently produce different output
-# on stable vs nightly and break reproducibility.
-#
-# `max_width = 100` pins against the rustfmt 1.6+ default change to 120.
-# `edition` must match the workspace `Cargo.toml` `edition = "2021"`.
-# All other options (`tab_spaces = 4`, `newline_style = "Unix"`,
-# `use_small_heuristics = "Default"`, etc.) are left at their stable
-# defaults and are unlikely to change. Add a pin here if a future
-# rustfmt release changes one of them.
+# `condense_wildcard_suffixes`) would silently produce different
+# output on stable vs nightly and break reproducibility.
 
 edition = "2021"
-max_width = 100
