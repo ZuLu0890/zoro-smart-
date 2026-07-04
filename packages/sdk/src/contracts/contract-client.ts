@@ -6,12 +6,17 @@
  * does not require a signed envelope), and every write prepares a fully
  * formed `Contract.invokeHostFunction` operation that the caller can sign
  * with their wallet (Freighter / Lobster / etc.)
+ *
+ * The source account for `simulateTransaction` is provided by a
+ * `SimulationAccount` (see `../simulation-account.ts`) that is shared
+ * across all four contract wrappers. This replaces the prior hard-coded
+ * `GAAAA…` / seq `0` source which the public Soroban RPCs reject with
+ * `MissingAccount`.
  */
 
 import {
   Contract,
   TransactionBuilder,
-  Account,
   Address,
   nativeToScVal,
   scValToNative,
@@ -23,6 +28,8 @@ import {
 // code without dragging in Horizon helpers.
 import { Server as SorobanRpcServer } from '@stellar/stellar-sdk/rpc';
 
+import { SimulationAccount } from '../simulation-account.js';
+
 export interface ContractClientOptions {
   /** Contract id (C-...). */
   contractId: string;
@@ -30,6 +37,13 @@ export interface ContractClientOptions {
   sorobanRpcUrl: string;
   /** Network passphrase. */
   networkPassphrase: string;
+  /**
+   * Shared source account for every `simulateTransaction` call. Defaults
+   * to the zero key for backwards compatibility, but the public Soroban
+   * RPCs will reject that — `SolShareClient` always injects a real
+   * account instead.
+   */
+  simulationAccount?: SimulationAccount;
 }
 
 interface SimulationResult {
@@ -46,6 +60,7 @@ export class ContractClient {
   readonly contractId: string;
   readonly networkPassphrase: string;
   private readonly rpc: SorobanRpcServer;
+  private simulationAccount: SimulationAccount;
 
   constructor(opts: ContractClientOptions) {
     this.contractId = opts.contractId;
@@ -54,6 +69,12 @@ export class ContractClient {
     this.rpc = new SorobanRpcServer(opts.sorobanRpcUrl, {
       allowHttp: opts.sorobanRpcUrl.startsWith('http://'),
     });
+    this.simulationAccount =
+      opts.simulationAccount ??
+      new SimulationAccount({
+        publicKey: 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+        sequenceNumber: '0',
+      });
   }
 
   /** Throws a clear error if the contract id was never bound. */
@@ -65,6 +86,15 @@ export class ContractClient {
   }
 
   /**
+   * Replace the source account used for every read. Pass the secret key
+   * (via `setSimulationAccount`) if you also want to be able to fund
+   * the account through Friendbot.
+   */
+  setSimulationAccount(account: SimulationAccount): void {
+    this.simulationAccount = account;
+  }
+
+  /**
    * Simulate a read-only call to `method(args)`. Returns the decoded native
    * JS value (the Soroban SDK handles XDR→native conversion for the common
    * primitives; for custom contract types callers should pass a parser).
@@ -72,7 +102,7 @@ export class ContractClient {
   async read<T>(method: string, args: Record<string, unknown> = {}): Promise<T> {
     if (!method) throw new Error('method is required');
     const contract = this.requireContract();
-    const source = new Account('GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA', '0');
+    const source = this.simulationAccount.account;
     const params = Object.values(args).map((v) => encodeValue(v));
     const tx = new TransactionBuilder(source, {
       fee: '100',

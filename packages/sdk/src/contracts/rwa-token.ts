@@ -1,4 +1,5 @@
 import { ContractClient, type ContractClientOptions } from './contract-client.js';
+import type { SimulationAccount } from '../simulation-account.js';
 
 export class RwaTokenContract {
   private readonly client: ContractClient;
@@ -8,13 +9,20 @@ export class RwaTokenContract {
     contractId: string,
     sorobanRpcUrl: string,
     networkPassphrase: string,
+    simulationAccount: SimulationAccount,
   ) {
     this.contractId = contractId;
     this.client = new ContractClient({
       contractId,
       sorobanRpcUrl,
       networkPassphrase,
+      simulationAccount,
     });
+  }
+
+  /** Swap the source account for every read on this contract. */
+  setSimulationAccount(account: SimulationAccount): void {
+    this.client.setSimulationAccount(account);
   }
 
   async readTotalSupply(): Promise<string> {

@@ -1,13 +1,29 @@
 import { ContractClient } from './contract-client.js';
+import type { SimulationAccount } from '../simulation-account.js';
 import type { SolarArraySummary } from '@solshare/shared';
 
 export class SolarRegistryContract {
   private readonly client: ContractClient;
   readonly contractId: string;
 
-  constructor(contractId: string, sorobanRpcUrl: string, networkPassphrase: string) {
+  constructor(
+    contractId: string,
+    sorobanRpcUrl: string,
+    networkPassphrase: string,
+    simulationAccount: SimulationAccount,
+  ) {
     this.contractId = contractId;
-    this.client = new ContractClient({ contractId, sorobanRpcUrl, networkPassphrase });
+    this.client = new ContractClient({
+      contractId,
+      sorobanRpcUrl,
+      networkPassphrase,
+      simulationAccount,
+    });
+  }
+
+  /** Swap the source account for every read on this contract. */
+  setSimulationAccount(account: SimulationAccount): void {
+    this.client.setSimulationAccount(account);
   }
 
   async count(): Promise<number> {
