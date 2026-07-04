@@ -55,10 +55,22 @@ commonly use: `feat`, `fix`, `docs`, `chore`, `refactor`, `test`,
 
 ## Project bootstrap scripts
 
-`tools/scripts/` holds two idempotent bash helpers used to seed the
-project after a fresh clone. They are intended to be run by the repo
+`tools/scripts/` holds two bash helpers used to seed the project
+after a fresh clone. They are intended to be run by the repo
 maintainer, not by every contributor — but they are checked in so the
-process is reproducible across environments.
+process is reproducible across environments. Both scripts are
+**idempotent in the parts that work via the REST API** (label and
+milestone creation, issue assignment); the optional Project v2
+board creation is a no-op after the first attempt regardless of
+outcome, because the gh CLI integration we use does not have the
+`project` scope (see the note in `README.md`).
+
+### Prerequisites
+
+- `gh` CLI v2.80+ ([install](https://cli.github.com/manual/installation))
+- `python3` (used inline for JSON parsing — no third-party deps)
+- `gh auth login` with at minimum the `repo` scope (the `project`
+  scope is optional and will only be used if present)
 
 - **`tools/scripts/create-issues.sh`** — reads the five files in
   `docs/issues/0001-*.md … 0005-*.md`, ensures the required project
@@ -66,18 +78,16 @@ process is reproducible across environments.
   `frontend`, `api`, `sdk`, `soroban`, `bridge`, `help wanted`,
   `needs-triage`, `priority: high/medium/low`), and opens one
   GitHub issue per file with the labels and body parsed from the
-  frontmatter.
+  frontmatter. Re-runs detect existing issues by title and skip them.
 
 - **`tools/scripts/setup-project-board.sh`** — creates the
   `v0.2` / `v0.3` / `v0.4` milestones and the `status: backlog /
   in progress / review / done` labels, then assigns every open
   issue to its milestone and initial status column. It will
-  additionally create the `SolShare Roadmap` project board and
-  populate its columns if the gh CLI integration has the `project`
-  scope; otherwise it stops short of the board itself and prints
-  a one-line instruction to create it via the web UI. Both
-  scripts are idempotent — re-running them is a no-op once the
-  repo is bootstrapped.
+  additionally try to create the `SolShare Roadmap` project board
+  and populate its columns if the gh CLI integration has the
+  `project` scope; otherwise it stops short of the board itself
+  and prints a one-line instruction to create it via the web UI.
 
 To re-run after a fresh clone:
 
