@@ -1,5 +1,4 @@
 import { getDb } from '../db/client.js';
-import { arrays } from '../db/schema.js';
 import { logger } from '../logger.js';
 import type { SorobanEvent } from '@solshare/sdk';
 

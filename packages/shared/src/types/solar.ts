@@ -1,5 +1,3 @@
-import type { SourceChain } from '../constants.js';
-
 export type ArrayStatus = 'Pending' | 'Active' | 'Maintenance' | 'Decommissioned';
 
 export type PanelTechnology =

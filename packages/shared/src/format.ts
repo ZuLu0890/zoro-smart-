@@ -4,8 +4,8 @@
  * These helpers are pure, dependency-free, and safe to use in any JS runtime.
  */
 
-const STROOPS_PER_XLM = 10_000_000n;
-const SCALING_FACTOR_USDC = 1_000_000n; // 6 decimals
+const _STROOPS_PER_XLM = 10_000_000n;
+const _SCALING_FACTOR_USDC = 1_000_000n; // 6 decimals
 
 /** Format an i128 (or string) amount with the given number of decimals. */
 export function formatAmount(
