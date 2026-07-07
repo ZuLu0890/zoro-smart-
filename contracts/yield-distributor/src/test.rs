@@ -157,3 +157,37 @@ fn test_fund_rejects_zero_amount() {
         "fund(-1) must fail with ZeroAmount, not succeed"
     );
 }
+
+#[test]
+fn test_funder_getter_returns_stored_funder() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register_contract(None, YieldDistributor);
+    let admin = Address::generate(&env);
+    let funder = Address::generate(&env);
+    let share_token = Address::generate(&env);
+    let payment_token = Address::generate(&env);
+
+    let client = YieldDistributorContractClient::new(&env, &contract_id);
+    client.initialize(&admin, &funder, &share_token, &payment_token);
+
+    // funder() must return exactly the address passed to initialize().
+    assert_eq!(client.funder(), funder);
+}
+
+#[test]
+fn test_total_claimed_starts_at_zero() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register_contract(None, YieldDistributor);
+    let admin = Address::generate(&env);
+    let funder = Address::generate(&env);
+    let share_token = Address::generate(&env);
+    let payment_token = Address::generate(&env);
+
+    let client = YieldDistributorContractClient::new(&env, &contract_id);
+    client.initialize(&admin, &funder, &share_token, &payment_token);
+
+    // Before any claim(), total_claimed() must be 0.
+    assert_eq!(client.total_claimed(), 0i128);
+}

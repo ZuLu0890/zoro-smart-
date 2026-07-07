@@ -38,6 +38,24 @@ export class YieldDistributorContract {
     return Number(out);
   }
 
+  /**
+   * Returns the address authorised to call `fund()` on this distributor.
+   * Useful for the dashboard to show who is depositing revenue batches
+   * and for the indexer to validate incoming relay transactions.
+   */
+  async funder(): Promise<string> {
+    return this.client.read<string>('funder');
+  }
+
+  /**
+   * Returns the cumulative amount of yield claimed by all holders since
+   * the contract was deployed. Exposed by the contract as `TotalClaimed`
+   * in instance storage and updated on every successful `claim()`.
+   */
+  async totalClaimed(): Promise<string> {
+    return this.client.read<string>('total_claimed');
+  }
+
   buildFund(from: string, amount: string) {
     return this.client.buildWrite('fund', { from, amount });
   }

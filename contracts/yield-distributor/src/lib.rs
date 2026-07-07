@@ -155,6 +155,15 @@ impl YieldDistributor {
             .ok_or(YieldError::NotInitialized)
     }
 
+    /// Return the permissioned funder address. Useful for the indexer and
+    /// the dashboard to show who is authorised to deposit revenue.
+    pub fn funder(env: Env) -> Result<Address, YieldError> {
+        env.storage()
+            .instance()
+            .get(&DataKey::Funder)
+            .ok_or(YieldError::NotInitialized)
+    }
+
     pub fn yield_per_share(env: Env) -> i128 {
         env.storage()
             .instance()
@@ -167,6 +176,16 @@ impl YieldDistributor {
             .instance()
             .get(&DataKey::LastFundedAt)
             .unwrap_or(0u64)
+    }
+
+    /// Return the aggregate amount of yield that has been claimed across
+    /// all holders since the contract was deployed. Useful for analytics
+    /// dashboards and indexer reconciliation.
+    pub fn total_claimed(env: Env) -> i128 {
+        env.storage()
+            .instance()
+            .get(&DataKey::TotalClaimed)
+            .unwrap_or(0i128)
     }
 
     // --------------------------------------------------------------------
