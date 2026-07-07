@@ -35,6 +35,8 @@ pub enum YieldError {
     /// Nothing currently claimable for `holder`.
     NothingToClaim = 6,
     MathOverflow = 7,
+    /// The supplied amount was zero or negative.
+    ZeroAmount = 8,
 }
 
 // ============================================================================
@@ -216,7 +218,7 @@ impl YieldDistributor {
     /// already approved this contract to spend its payment token balance.
     pub fn fund(env: Env, amount: i128) -> Result<(), YieldError> {
         if amount <= 0 {
-            return Err(YieldError::MathOverflow);
+            return Err(YieldError::ZeroAmount);
         }
         let funder: Address = env
             .storage()
@@ -284,6 +286,13 @@ impl YieldDistributor {
         env.storage()
             .persistent()
             .set(&DataKey::PaidYieldPerShare(holder.clone()), &yps);
+        // Keep the per-holder ledger alive long enough to survive between
+        // revenue epochs (~90 days / 7_776_000 ledgers on Public Network).
+        env.storage().persistent().extend_ttl(
+            &DataKey::PaidYieldPerShare(holder.clone()),
+            172_800,
+            7_776_000,
+        );
 
         let payment_token = Self::payment_token(env.clone())?;
         let pay_client = token::TokenClient::new(&env, &payment_token);

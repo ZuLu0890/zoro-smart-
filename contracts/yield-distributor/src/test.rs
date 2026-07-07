@@ -126,3 +126,34 @@ fn test_set_funder_admin_only() {
     let res = client.try_fund(&1i128);
     assert!(res.is_err());
 }
+
+#[test]
+fn test_fund_rejects_zero_amount() {
+    // fund() must return ZeroAmount (not MathOverflow) when called with
+    // amount <= 0. This guards against accidental misuse of the error code
+    // that was previously MathOverflow, which is semantically wrong.
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register_contract(None, YieldDistributor);
+    let admin = Address::generate(&env);
+    let funder = Address::generate(&env);
+    let share_token = Address::generate(&env);
+    let payment_token = Address::generate(&env);
+
+    let client = YieldDistributorContractClient::new(&env, &contract_id);
+    client.initialize(&admin, &funder, &share_token, &payment_token);
+
+    // Zero amount.
+    let res = client.try_fund(&0i128);
+    assert!(
+        res.is_err(),
+        "fund(0) must fail with ZeroAmount, not succeed"
+    );
+
+    // Negative amount.
+    let res_neg = client.try_fund(&-1i128);
+    assert!(
+        res_neg.is_err(),
+        "fund(-1) must fail with ZeroAmount, not succeed"
+    );
+}
