@@ -67,7 +67,34 @@ export async function startPoller(opts: PollerOpts): Promise<void> {
 /** Lightweight helper used by tests. */
 export function classifyEvent(e: SorobanEvent): keyof typeof CONTRACT_EVENTS {
   if (!e.topic.length) return 'Init';
-  const topic = e.topic[0] ?? '';
+  const rawTopic = e.topic[0] ?? '';
+  // The Soroban RPC `getEvents` response encodes topics as either:
+  //   1. A plain string (e.g. "mint") — produced by our mock harness and
+  //      some older versions of the RPC.
+  //   2. A JSON-serialised ScVal object like {"type":"symbol","value":"mint"}
+  //      — the canonical form returned by the live Testnet / Public RPC.
+  //      ScvSymbol is the standard encoding for contract event topics.
+  // We try to extract the string value from either shape.
+  let topic: string;
+  if (typeof rawTopic === 'string' && rawTopic.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(rawTopic) as unknown;
+      if (
+        parsed !== null &&
+        typeof parsed === 'object' &&
+        'value' in (parsed as Record<string, unknown>)
+      ) {
+        topic = String((parsed as Record<string, unknown>).value);
+      } else {
+        topic = rawTopic;
+      }
+    } catch {
+      topic = rawTopic;
+    }
+  } else {
+    topic = typeof rawTopic === 'string' ? rawTopic : String(rawTopic);
+  }
+
   const kn = Object.keys(CONTRACT_EVENTS) as (keyof typeof CONTRACT_EVENTS)[];
   for (const k of kn) {
     if (topic.startsWith(CONTRACT_EVENTS[k])) return k;

@@ -71,4 +71,43 @@ describe('classifyEvent', () => {
     const event = makeEvent([CONTRACT_EVENTS.Mint, CONTRACT_EVENTS.Burn]);
     expect(classifyEvent(event)).toBe('Mint');
   });
+
+  // -----------------------------------------------------------------------
+  // ScVal JSON-object topic format (canonical form from live Soroban RPC)
+  // -----------------------------------------------------------------------
+
+  it('classifies a mint event from ScVal symbol object topic', () => {
+    const event = makeEvent([JSON.stringify({ type: 'symbol', value: 'mint' })]);
+    expect(classifyEvent(event)).toBe('Mint');
+  });
+
+  it('classifies a claim event from ScVal symbol object topic', () => {
+    const event = makeEvent([JSON.stringify({ type: 'symbol', value: 'claim' })]);
+    expect(classifyEvent(event)).toBe('Claim');
+  });
+
+  it('classifies a fund event from ScVal symbol object topic', () => {
+    const event = makeEvent([JSON.stringify({ type: 'symbol', value: 'fund' })]);
+    expect(classifyEvent(event)).toBe('Fund');
+  });
+
+  it('classifies a transfer event from ScVal symbol object topic', () => {
+    const event = makeEvent([JSON.stringify({ type: 'symbol', value: 'transfer' })]);
+    expect(classifyEvent(event)).toBe('Transfer');
+  });
+
+  it('falls back to Init for a ScVal object with unknown value', () => {
+    const event = makeEvent([JSON.stringify({ type: 'symbol', value: 'unknown_xyz' })]);
+    expect(classifyEvent(event)).toBe('Init');
+  });
+
+  it('falls back to Init for a ScVal object missing the value field', () => {
+    const event = makeEvent([JSON.stringify({ type: 'symbol' })]);
+    expect(classifyEvent(event)).toBe('Init');
+  });
+
+  it('handles malformed JSON topic gracefully by falling back to Init', () => {
+    const event = makeEvent(['{not valid json']);
+    expect(classifyEvent(event)).toBe('Init');
+  });
 });
