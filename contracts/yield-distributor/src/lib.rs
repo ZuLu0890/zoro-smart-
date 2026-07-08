@@ -15,7 +15,7 @@
 //! every deposit, and lets holders claim when convenient.
 
 use soroban_sdk::{
-    contract, contractevent, contractimpl, contracttype, symbol_short, token, Address, Env,
+    contract, contractimpl, contracttype, symbol_short, token, Address, Env,
 };
 
 // ============================================================================
@@ -65,32 +65,6 @@ pub enum DataKey {
 }
 
 // ============================================================================
-// Events
-// ============================================================================
-
-#[contractevent]
-pub struct InitializedEvent {
-    pub admin: Address,
-    pub funder: Address,
-    pub share_token: Address,
-    pub payment_token: Address,
-}
-
-#[contractevent]
-pub struct FundedEvent {
-    pub from: Address,
-    pub amount: i128,
-    pub total_yield_per_share: i128,
-}
-
-#[contractevent]
-pub struct ClaimedEvent {
-    #[topic]
-    pub holder: Address,
-    pub amount: i128,
-}
-
-// ============================================================================
 // Contract
 // ============================================================================
 
@@ -127,13 +101,10 @@ impl YieldDistributor {
             .set(&DataKey::YieldPerShare, &0i128);
         env.storage().instance().set(&DataKey::TotalClaimed, &0i128);
         env.storage().instance().set(&DataKey::LastFundedAt, &0u64);
-        InitializedEvent {
-            admin,
-            funder,
-            share_token,
-            payment_token,
-        }
-        .publish(&env);
+        env.events().publish(
+            (symbol_short!("init"),),
+            (admin, funder, share_token, payment_token),
+        );
         Ok(())
     }
 
@@ -271,19 +242,17 @@ impl YieldDistributor {
             .instance()
             .get(&DataKey::YieldPerShare)
             .unwrap_or(0i128);
-        env.storage().instance().set(
-            &DataKey::YieldPerShare,
-            &yps.checked_add(yps_delta).ok_or(YieldError::MathOverflow)?,
-        );
+        let new_yps = yps.checked_add(yps_delta).ok_or(YieldError::MathOverflow)?;
+        env.storage()
+            .instance()
+            .set(&DataKey::YieldPerShare, &new_yps);
         env.storage()
             .instance()
             .set(&DataKey::LastFundedAt, &env.ledger().timestamp());
-        FundedEvent {
-            from: funder,
-            amount,
-            total_yield_per_share: yps + yps_delta,
-        }
-        .publish(&env);
+        env.events().publish(
+            (symbol_short!("fund"),),
+            (funder, amount, new_yps),
+        );
         Ok(())
     }
 
@@ -309,8 +278,8 @@ impl YieldDistributor {
         // revenue epochs (~90 days / 7_776_000 ledgers on Public Network).
         env.storage().persistent().extend_ttl(
             &DataKey::PaidYieldPerShare(holder.clone()),
-            172_800,
-            7_776_000,
+            172_800u32,
+            7_776_000u32,
         );
 
         let payment_token = Self::payment_token(env.clone())?;
@@ -329,11 +298,10 @@ impl YieldDistributor {
                 .ok_or(YieldError::MathOverflow)?,
         );
 
-        ClaimedEvent {
-            holder,
-            amount: claimable,
-        }
-        .publish(&env);
+        env.events().publish(
+            (symbol_short!("claim"), holder.clone()),
+            claimable,
+        );
         Ok(claimable)
     }
 

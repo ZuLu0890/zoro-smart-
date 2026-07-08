@@ -1,17 +1,18 @@
 #![cfg(test)]
+extern crate std;
 
-use super::*;
-use soroban_sdk::{testutils::Address as _, Env, String};
+use crate::{RwaToken, RwaTokenClient};
+use soroban_sdk::{testutils::Address as _, Address, Env, IntoVal, String};
 
 #[test]
 fn test_initialize_then_metadata() {
     let env = Env::default();
     env.mock_all_auths();
-    let contract_id = env.register_contract(None, RwaToken);
+    let contract_id = env.register(RwaToken, ());
     let admin = Address::generate(&env);
     let operator = Address::generate(&env);
 
-    let client = RwaTokenContractClient::new(&env, &contract_id);
+    let client = RwaTokenClient::new(&env, &contract_id);
     client.initialize(
         &admin,
         &operator,
@@ -35,10 +36,10 @@ fn test_initialize_then_metadata() {
 fn test_double_initialize_errors() {
     let env = Env::default();
     env.mock_all_auths();
-    let contract_id = env.register_contract(None, RwaToken);
+    let contract_id = env.register(RwaToken, ());
     let admin = Address::generate(&env);
     let operator = Address::generate(&env);
-    let client = RwaTokenContractClient::new(&env, &contract_id);
+    let client = RwaTokenClient::new(&env, &contract_id);
     client.initialize(
         &admin,
         &operator,
@@ -60,13 +61,13 @@ fn test_double_initialize_errors() {
 fn test_mint_transfer_burn_flow() {
     let env = Env::default();
     env.mock_all_auths();
-    let contract_id = env.register_contract(None, RwaToken);
+    let contract_id = env.register(RwaToken, ());
     let admin = Address::generate(&env);
     let operator = Address::generate(&env);
     let alice = Address::generate(&env);
     let bob = Address::generate(&env);
 
-    let client = RwaTokenContractClient::new(&env, &contract_id);
+    let client = RwaTokenClient::new(&env, &contract_id);
     client.initialize(
         &admin,
         &operator,
@@ -92,13 +93,13 @@ fn test_mint_transfer_burn_flow() {
 fn test_unauthorized_mint_rejected() {
     let env = Env::default();
     env.mock_all_auths();
-    let contract_id = env.register_contract(None, RwaToken);
+    let contract_id = env.register(RwaToken, ());
     let admin = Address::generate(&env);
     let operator = Address::generate(&env);
     let alice = Address::generate(&env);
     let imposter = Address::generate(&env);
 
-    let client = RwaTokenContractClient::new(&env, &contract_id);
+    let client = RwaTokenClient::new(&env, &contract_id);
     client.initialize(
         &admin,
         &operator,
@@ -114,6 +115,7 @@ fn test_unauthorized_mint_rejected() {
             contract: &contract_id,
             fn_name: "mint",
             args: soroban_sdk::vec![&env, alice.into_val(&env), 1_000i128.into_val(&env)],
+            sub_invokes: &[],
         },
     }]);
 
@@ -125,14 +127,14 @@ fn test_unauthorized_mint_rejected() {
 fn test_approve_and_transfer_from() {
     let env = Env::default();
     env.mock_all_auths();
-    let contract_id = env.register_contract(None, RwaToken);
+    let contract_id = env.register(RwaToken, ());
     let admin = Address::generate(&env);
     let operator = Address::generate(&env);
     let alice = Address::generate(&env);
     let bob = Address::generate(&env);
     let spender = Address::generate(&env);
 
-    let client = RwaTokenContractClient::new(&env, &contract_id);
+    let client = RwaTokenClient::new(&env, &contract_id);
     client.initialize(
         &admin,
         &operator,
@@ -158,11 +160,11 @@ fn test_approve_and_transfer_from() {
 fn test_set_operator_admin_only() {
     let env = Env::default();
     env.mock_all_auths();
-    let contract_id = env.register_contract(None, RwaToken);
+    let contract_id = env.register(RwaToken, ());
     let admin = Address::generate(&env);
     let operator = Address::generate(&env);
     let new_operator = Address::generate(&env);
-    let client = RwaTokenContractClient::new(&env, &contract_id);
+    let client = RwaTokenClient::new(&env, &contract_id);
     client.initialize(
         &admin,
         &operator,
@@ -177,21 +179,10 @@ fn test_set_operator_admin_only() {
 #[test]
 fn test_version_returns_cargo_pkg_version() {
     // `version()` is a pure function that returns the crate version baked
-    // in at compile time. We verify it is non-empty and does not contain
-    // whitespace (i.e. it looks like a semver string "MAJOR.MINOR.PATCH").
-    let version = RwaToken::version();
+    // in at compile time. We verify it round-trips as a Symbol.
     let env = Env::default();
-    // Convert the Symbol to a String so we can inspect its bytes.
-    let as_str = version.to_string();
-    // Must be non-empty.
-    assert!(!as_str.is_empty(), "version() returned an empty symbol");
-    // Must not contain ASCII spaces or newlines.
-    assert!(
-        !as_str.contains(' ') && !as_str.contains('\n'),
-        "version() symbol contains whitespace: {:?}",
-        as_str
-    );
+    let version = RwaToken::version();
     // Sanity check: Symbol round-trips correctly through the Env.
-    let round_tripped = soroban_sdk::Symbol::new(&env, &as_str);
+    let round_tripped = soroban_sdk::Symbol::new(&env, env!("CARGO_PKG_VERSION"));
     assert_eq!(version, round_tripped);
 }

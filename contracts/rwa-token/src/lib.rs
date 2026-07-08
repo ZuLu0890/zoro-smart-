@@ -9,14 +9,14 @@
 //! can mint shares sold in a crowdfunding round.
 
 use soroban_sdk::{
-    contract, contractevent, contractimpl, contracttype, symbol_short, Address, Env, String, Symbol,
+    contract, contractimpl, contracterror, contracttype, symbol_short, Address, Env, String, Symbol,
 };
 
 // ============================================================================
 // Errors
 // ============================================================================
 
-#[contracttype]
+#[contracterror]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum TokenError {
     /// Contract has not yet been initialised.
@@ -54,44 +54,6 @@ pub enum DataKey {
     /// Total supply tracker (required because SEP-41 has no `totalSupply()`,
     /// but RWA dashboards need to know it).
     TotalSupply,
-}
-
-// ============================================================================
-// Events
-// ============================================================================
-
-#[contractevent]
-pub struct MintEvent {
-    #[topic]
-    pub to: Address,
-    pub admin: Address,
-    pub amount: i128,
-}
-
-#[contractevent]
-pub struct BurnEvent {
-    #[topic]
-    pub from: Address,
-    pub amount: i128,
-}
-
-#[contractevent]
-pub struct TransferEvent {
-    #[topic]
-    pub from: Address,
-    #[topic]
-    pub to: Address,
-    pub amount: i128,
-}
-
-#[contractevent]
-pub struct ApproveEvent {
-    #[topic]
-    pub from: Address,
-    #[topic]
-    pub spender: Address,
-    pub amount: i128,
-    pub expiration_ledger: u32,
 }
 
 // ============================================================================
@@ -211,7 +173,10 @@ impl RwaToken {
         }
         from.require_auth();
         Self::move_balance(&env, &from, &to, amount)?;
-        TransferEvent { from, to, amount }.publish(&env);
+        env.events().publish(
+            (symbol_short!("transfer"), from.clone(), to.clone()),
+            amount,
+        );
         Ok(())
     }
 
@@ -235,21 +200,18 @@ impl RwaToken {
         // from `expiration_ledger` relative to the current ledger so the
         // entry is evicted naturally once the approval expires.
         let current = env.ledger().sequence();
-        let target = if expiration_ledger > current {
-            (expiration_ledger - current) as u64
+        let target: u32 = if expiration_ledger > current {
+            (expiration_ledger - current).max(17_280)
         } else {
-            17_280u64
+            17_280u32
         };
         env.storage()
             .persistent()
-            .extend_ttl(&key, 17_280, target.max(17_280));
-        ApproveEvent {
-            from: owner,
-            to: spender,
-            amount,
-            expiration_ledger,
-        }
-        .publish(&env);
+            .extend_ttl(&key, 17_280u32, target);
+        env.events().publish(
+            (symbol_short!("approve"), owner.clone(), spender.clone()),
+            (amount, expiration_ledger),
+        );
         Ok(())
     }
 
@@ -272,12 +234,10 @@ impl RwaToken {
         }
         env.storage().persistent().set(&key, &(allowance - amount));
         Self::move_balance(&env, &owner, &to, amount)?;
-        TransferEvent {
-            from: owner,
-            to,
+        env.events().publish(
+            (symbol_short!("transfer"), owner.clone(), to.clone()),
             amount,
-        }
-        .publish(&env);
+        );
         Ok(())
     }
 
@@ -291,7 +251,7 @@ impl RwaToken {
         if amount <= 0 {
             return Err(TokenError::ZeroAmount);
         }
-        let operator = env
+        let operator: Address = env
             .storage()
             .instance()
             .get(&DataKey::Operator)
@@ -317,12 +277,8 @@ impl RwaToken {
         env.storage()
             .instance()
             .set(&DataKey::TotalSupply, &new_total);
-        MintEvent {
-            to,
-            admin: operator,
-            amount,
-        }
-        .publish(&env);
+        env.events()
+            .publish((symbol_short!("mint"), to.clone()), (operator, amount));
         Ok(())
     }
 
@@ -351,7 +307,8 @@ impl RwaToken {
         env.storage()
             .instance()
             .set(&DataKey::TotalSupply, &(total - amount));
-        BurnEvent { from, amount }.publish(&env);
+        env.events()
+            .publish((symbol_short!("burn"), from.clone()), amount);
         Ok(())
     }
 
@@ -404,10 +361,10 @@ impl RwaToken {
         // Touch a TTL key so balances persist.
         env.storage()
             .persistent()
-            .extend_ttl(&DataKey::Balance(from.clone()), 172_800, 7_776_000);
+            .extend_ttl(&DataKey::Balance(from.clone()), 172_800u32, 7_776_000u32);
         env.storage()
             .persistent()
-            .extend_ttl(&DataKey::Balance(to.clone()), 172_800, 7_776_000);
+            .extend_ttl(&DataKey::Balance(to.clone()), 172_800u32, 7_776_000u32);
         Ok(())
     }
 

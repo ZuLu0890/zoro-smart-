@@ -25,8 +25,7 @@
 //! wrapped token it manages (the rwa-token pattern is reused for this trick).
 
 use soroban_sdk::{
-    contract, contractevent, contractimpl, contracttype, symbol_short, Address, Bytes, BytesN, Env,
-    Map, Vec,
+    contract, contractimpl, contracttype, symbol_short, Address, Bytes, BytesN, Env, Map, Vec,
 };
 
 // ============================================================================
@@ -103,35 +102,6 @@ pub struct UnwrapRequest {
 }
 
 // ============================================================================
-// Events
-// ============================================================================
-
-#[contractevent]
-pub struct WrappedEvent {
-    #[topic]
-    pub recipient: Address,
-    pub chain_id: u32,
-    pub source_tx_hash: BytesN<32>,
-    pub wrapped_token: Address,
-    pub amount: i128,
-}
-
-#[contractevent]
-pub struct UnwrappedEvent {
-    #[topic]
-    pub sender: Address,
-    pub chain_id: u32,
-    pub amount: i128,
-    pub nonce: u64,
-}
-
-#[contractevent]
-pub struct ValidatorSetChangedEvent {
-    pub chain_id: u32,
-    pub new_threshold: u32,
-}
-
-// ============================================================================
 // Contract
 // ============================================================================
 
@@ -174,11 +144,10 @@ impl BridgeWrapper {
         env.storage()
             .persistent()
             .set(&DataKey::Threshold(chain_id), &threshold);
-        ValidatorSetChangedEvent {
-            chain_id,
-            new_threshold: threshold,
-        }
-        .publish(&env);
+        env.events().publish(
+            (symbol_short!("valset"),),
+            (chain_id, threshold),
+        );
         Ok(())
     }
 
@@ -303,14 +272,15 @@ impl BridgeWrapper {
         // perform the actual mint via a privileged operator-run service.
         //   (In production this bridge would itself carry the minter role and
         //   use `env.invoke_contract(&wrapped_token, symbol_short!("mint"), ...)`.)
-        WrappedEvent {
-            recipient: deposit.recipient.clone(),
-            chain_id: deposit.chain_id,
-            source_tx_hash: deposit.source_tx_hash.clone(),
-            wrapped_token: wrapped_token.clone(),
-            amount: deposit.amount,
-        }
-        .publish(&env);
+        env.events().publish(
+            (symbol_short!("wrap"), deposit.recipient.clone()),
+            (
+                deposit.chain_id,
+                deposit.source_tx_hash.clone(),
+                wrapped_token.clone(),
+                deposit.amount,
+            ),
+        );
 
         env.storage()
             .persistent()
@@ -342,13 +312,10 @@ impl BridgeWrapper {
 
         // We don't actually burn here for the scaffold — production will
         // cross-contract invoke `burn` on the wrapped token contract.
-        UnwrappedEvent {
-            sender,
-            chain_id: request.chain_id,
-            amount: request.amount,
-            nonce: request.nonce,
-        }
-        .publish(&env);
+        env.events().publish(
+            (symbol_short!("unwrap"), sender.clone()),
+            (request.chain_id, request.amount, request.nonce),
+        );
         Ok(())
     }
 

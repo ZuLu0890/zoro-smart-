@@ -9,7 +9,7 @@
 //!   `Decommissioned` — physical removal; admin-signed only.
 
 use soroban_sdk::{
-    contract, contractevent, contractimpl, contracttype, symbol_short, Address, BytesN, Env,
+    contract, contractimpl, contracterror, contracttype, symbol_short, Address, BytesN, Env,
     String, Vec,
 };
 
@@ -17,7 +17,7 @@ use soroban_sdk::{
 // Errors
 // ============================================================================
 
-#[contracttype]
+#[contracterror]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum RegistryError {
     NotInitialized = 1,
@@ -105,32 +105,6 @@ pub enum DataKey {
     Array(BytesN<32>),
     /// Index of all array ids for enumeration.
     Index,
-}
-
-// ============================================================================
-// Events
-// ============================================================================
-
-#[contractevent]
-pub struct ArrayRegisteredEvent {
-    #[topic]
-    pub id: BytesN<32>,
-    pub operator: Address,
-    pub rated_capacity_w: u64,
-}
-
-#[contractevent]
-pub struct ArrayUpdatedEvent {
-    #[topic]
-    pub id: BytesN<32>,
-    pub new_status: ArrayStatus,
-}
-
-#[contractevent]
-pub struct ArrayDecommissionedEvent {
-    #[topic]
-    pub id: BytesN<32>,
-    pub reason: String,
 }
 
 // ============================================================================
@@ -234,12 +208,10 @@ impl SolarRegistry {
         index.push_back(array.id.clone());
         env.storage().instance().set(&DataKey::Index, &index);
 
-        ArrayRegisteredEvent {
-            id: array.id,
-            operator: array.operator,
-            rated_capacity_w: array.rated_capacity_w,
-        }
-        .publish(&env);
+        env.events().publish(
+            (symbol_short!("register"), array.id.clone()),
+            (array.operator, array.rated_capacity_w),
+        );
         Ok(())
     }
 
@@ -287,7 +259,10 @@ impl SolarRegistry {
         env.storage()
             .persistent()
             .set(&DataKey::Array(id.clone()), &array);
-        ArrayUpdatedEvent { id, new_status }.publish(&env);
+        env.events().publish(
+            (symbol_short!("update"), id),
+            new_status,
+        );
         Ok(())
     }
 

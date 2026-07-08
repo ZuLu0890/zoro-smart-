@@ -7,9 +7,9 @@ use soroban_sdk::{testutils::Address as _, BytesN, Env};
 fn test_initialize_stores_admin() {
     let env = Env::default();
     env.mock_all_auths();
-    let contract_id = env.register_contract(None, BridgeWrapper);
+    let contract_id = env.register(BridgeWrapper, ());
     let admin = Address::generate(&env);
-    let client = BridgeWrapperContractClient::new(&env, &contract_id);
+    let client = BridgeWrapperClient::new(&env, &contract_id);
     client.initialize(&admin);
     // Re-init should fail
     let res = client.try_initialize(&admin);
@@ -20,13 +20,13 @@ fn test_initialize_stores_admin() {
 fn test_set_validators_then_get_round_trip() {
     let env = Env::default();
     env.mock_all_auths();
-    let contract_id = env.register_contract(None, BridgeWrapper);
+    let contract_id = env.register(BridgeWrapper, ());
     let admin = Address::generate(&env);
     let v1 = Address::generate(&env);
     let v2 = Address::generate(&env);
     let v3 = Address::generate(&env);
 
-    let client = BridgeWrapperContractClient::new(&env, &contract_id);
+    let client = BridgeWrapperClient::new(&env, &contract_id);
     client.initialize(&admin);
 
     let validators = soroban_sdk::vec![&env, v1.clone(), v2.clone(), v3.clone()];
@@ -44,12 +44,12 @@ fn test_set_validators_then_get_round_trip() {
 fn test_set_validators_rejects_bad_threshold() {
     let env = Env::default();
     env.mock_all_auths();
-    let contract_id = env.register_contract(None, BridgeWrapper);
+    let contract_id = env.register(BridgeWrapper, ());
     let admin = Address::generate(&env);
     let v1 = Address::generate(&env);
     let v2 = Address::generate(&env);
 
-    let client = BridgeWrapperContractClient::new(&env, &contract_id);
+    let client = BridgeWrapperClient::new(&env, &contract_id);
     client.initialize(&admin);
 
     let validators = soroban_sdk::vec![&env, v1, v2];
@@ -65,10 +65,10 @@ fn test_set_validators_rejects_bad_threshold() {
 fn test_bind_token_then_double_bind_errors() {
     let env = Env::default();
     env.mock_all_auths();
-    let contract_id = env.register_contract(None, BridgeWrapper);
+    let contract_id = env.register(BridgeWrapper, ());
     let admin = Address::generate(&env);
 
-    let client = BridgeWrapperContractClient::new(&env, &contract_id);
+    let client = BridgeWrapperClient::new(&env, &contract_id);
     client.initialize(&admin);
 
     let chain_id: u32 = 1;
@@ -86,10 +86,10 @@ fn test_bind_token_then_double_bind_errors() {
 fn test_unknown_chain_wrap_errors() {
     let env = Env::default();
     env.mock_all_auths();
-    let contract_id = env.register_contract(None, BridgeWrapper);
+    let contract_id = env.register(BridgeWrapper, ());
     let admin = Address::generate(&env);
 
-    let client = BridgeWrapperContractClient::new(&env, &contract_id);
+    let client = BridgeWrapperClient::new(&env, &contract_id);
     client.initialize(&admin);
 
     let recipient = Address::generate(&env);

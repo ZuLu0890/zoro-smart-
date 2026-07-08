@@ -1,7 +1,11 @@
 #![cfg(test)]
+extern crate std;
 
-use super::*;
-use soroban_sdk::{testutils::Address as _, BytesN, Env, String, Vec};
+use crate::{
+    ArrayStatus, EnvironmentalImpact, GeoLocation, PanelTechnology, SolarArray, SolarRegistry,
+    SolarRegistryClient,
+};
+use soroban_sdk::{testutils::Address as _, Address, BytesN, Env, String};
 
 fn make_array(env: &Env, id: BytesN<32>, operator: Address) -> SolarArray {
     SolarArray {
@@ -32,10 +36,10 @@ fn make_array(env: &Env, id: BytesN<32>, operator: Address) -> SolarArray {
 fn test_initialize_stores_admin_and_verifier() {
     let env = Env::default();
     env.mock_all_auths();
-    let contract_id = env.register_contract(None, SolarRegistry);
+    let contract_id = env.register(SolarRegistry, ());
     let admin = Address::generate(&env);
     let verifier = Address::generate(&env);
-    let client = SolarRegistryContractClient::new(&env, &contract_id);
+    let client = SolarRegistryClient::new(&env, &contract_id);
     client.initialize(&admin, &verifier);
     assert_eq!(client.admin(), admin);
     assert_eq!(client.verifier(), verifier);
@@ -45,11 +49,11 @@ fn test_initialize_stores_admin_and_verifier() {
 fn test_register_then_get_round_trip() {
     let env = Env::default();
     env.mock_all_auths();
-    let contract_id = env.register_contract(None, SolarRegistry);
+    let contract_id = env.register(SolarRegistry, ());
     let admin = Address::generate(&env);
     let verifier = Address::generate(&env);
     let operator = Address::generate(&env);
-    let client = SolarRegistryContractClient::new(&env, &contract_id);
+    let client = SolarRegistryClient::new(&env, &contract_id);
     client.initialize(&admin, &verifier);
 
     let id = BytesN::from_array(&env, &[1u8; 32]);
@@ -67,11 +71,11 @@ fn test_register_then_get_round_trip() {
 fn test_register_duplicate_id_errors() {
     let env = Env::default();
     env.mock_all_auths();
-    let contract_id = env.register_contract(None, SolarRegistry);
+    let contract_id = env.register(SolarRegistry, ());
     let admin = Address::generate(&env);
     let verifier = Address::generate(&env);
     let operator = Address::generate(&env);
-    let client = SolarRegistryContractClient::new(&env, &contract_id);
+    let client = SolarRegistryClient::new(&env, &contract_id);
     client.initialize(&admin, &verifier);
 
     let id = BytesN::from_array(&env, &[2u8; 32]);
@@ -85,11 +89,11 @@ fn test_register_duplicate_id_errors() {
 fn test_status_lifecycle_transitions() {
     let env = Env::default();
     env.mock_all_auths();
-    let contract_id = env.register_contract(None, SolarRegistry);
+    let contract_id = env.register(SolarRegistry, ());
     let admin = Address::generate(&env);
     let verifier = Address::generate(&env);
     let operator = Address::generate(&env);
-    let client = SolarRegistryContractClient::new(&env, &contract_id);
+    let client = SolarRegistryClient::new(&env, &contract_id);
     client.initialize(&admin, &verifier);
 
     let id = BytesN::from_array(&env, &[3u8; 32]);
@@ -119,10 +123,10 @@ fn test_status_lifecycle_transitions() {
 fn test_unknown_array_errors() {
     let env = Env::default();
     env.mock_all_auths();
-    let contract_id = env.register_contract(None, SolarRegistry);
+    let contract_id = env.register(SolarRegistry, ());
     let admin = Address::generate(&env);
     let verifier = Address::generate(&env);
-    let client = SolarRegistryContractClient::new(&env, &contract_id);
+    let client = SolarRegistryClient::new(&env, &contract_id);
     client.initialize(&admin, &verifier);
 
     let id = BytesN::from_array(&env, &[9u8; 32]);
@@ -134,11 +138,11 @@ fn test_unknown_array_errors() {
 fn test_bind_token_updates_array() {
     let env = Env::default();
     env.mock_all_auths();
-    let contract_id = env.register_contract(None, SolarRegistry);
+    let contract_id = env.register(SolarRegistry, ());
     let admin = Address::generate(&env);
     let verifier = Address::generate(&env);
     let operator = Address::generate(&env);
-    let client = SolarRegistryContractClient::new(&env, &contract_id);
+    let client = SolarRegistryClient::new(&env, &contract_id);
     client.initialize(&admin, &verifier);
 
     let id = BytesN::from_array(&env, &[4u8; 32]);
