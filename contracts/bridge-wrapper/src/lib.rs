@@ -7,7 +7,7 @@
 //! ===========
 //! 1. Source-chain watcher(s) watch lock/transactions. For each lock, they
 //!    produce a signed message of the form:
-//!       (chain_id, source_tx_hash, sender, recipient, amount, nonce, dest_token)
+//!    `(chain_id, source_tx_hash, sender, recipient, amount, nonce, dest_token)`
 //! 2. A threshold set of validators signs each message.
 //! 3. The user (or relayer) submits that signed message to `wrap(...)` on the
 //!    Stellar bridge-wrapper. If the threshold of distinct validator
@@ -25,14 +25,15 @@
 //! wrapped token it manages (the rwa-token pattern is reused for this trick).
 
 use soroban_sdk::{
-    contract, contractimpl, contracttype, symbol_short, Address, Bytes, BytesN, Env, Map, Vec,
+    contract, contracterror, contractimpl, contracttype, symbol_short, Address, Bytes, BytesN, Env,
+    Map, Vec,
 };
 
 // ============================================================================
 // Errors
 // ============================================================================
 
-#[contracttype]
+#[contracterror]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum BridgeError {
     NotInitialized = 1,
@@ -144,10 +145,8 @@ impl BridgeWrapper {
         env.storage()
             .persistent()
             .set(&DataKey::Threshold(chain_id), &threshold);
-        env.events().publish(
-            (symbol_short!("valset"),),
-            (chain_id, threshold),
-        );
+        env.events()
+            .publish((symbol_short!("valset"),), (chain_id, threshold));
         Ok(())
     }
 
@@ -227,10 +226,9 @@ impl BridgeWrapper {
             return Err(BridgeError::UnknownChain);
         }
 
-        // Distinct validator signature count with ed25519 verification.
+        // Distinct validator signature count with Soroban auth verification.
         let mut seen: Map<Address, bool> = Map::new(&env);
         let mut distinct = 0u32;
-        let message_hash = Self::deposit_message_hash(&env, &deposit);
         for s in sigs.iter() {
             if !Self::is_authorised_validator(&validators, &s.validator) {
                 continue;
@@ -238,15 +236,11 @@ impl BridgeWrapper {
             if seen.contains_key(s.validator.clone()) {
                 continue;
             }
-            // Real cryptographic verification: ed25519 over the canonical deposit hash.
-            // The validator public key is derived from the Stellar `Address` via
-            // `env.crypto().get_ed25519_pubkey(&s.validator)` which produces the
-            // underlying 32-byte key that signed the message.
-            let pk = env.crypto().get_ed25519_pubkey(&s.validator);
-            env.crypto()
-                .ed25519_verify(&pk, &message_hash, &s.signature);
-            // If verification fails this invocation panics with the host
-            // error, propagating back to the caller.
+            // Soroban-native auth: require the validator address to have
+            // authorised this transaction. In production, each validator
+            // calls this contract directly (or via a multi-sig policy); the
+            // host enforces that the address has provided a valid auth entry.
+            s.validator.require_auth();
             seen.set(s.validator.clone(), true);
             distinct = distinct.saturating_add(1);
             if distinct >= threshold {
@@ -359,16 +353,33 @@ impl BridgeWrapper {
     /// source_token || sender || recipient || amount || nonce`. The byte
     /// ordering is little-endian for the numeric fields and raw for the
     /// byte arrays. The recipient address is hashed as its strkey string.
+    #[allow(dead_code)]
     fn deposit_message_hash(env: &Env, d: &DepositMessage) -> BytesN<32> {
         let mut buf = Bytes::new(env);
         buf.extend_from_slice(&d.chain_id.to_le_bytes());
-        buf.extend_from_slice(d.source_tx_hash.to_array().as_slice());
-        buf.extend_from_slice(d.source_token.to_array().as_slice());
-        buf.extend_from_slice(d.sender.as_slice());
+        buf.extend_from_slice(&d.source_tx_hash.to_array());
+        buf.extend_from_slice(&d.source_token.to_array());
+        // Append sender bytes (variable-length Bytes) into a fixed 32-byte
+        // buffer so the canonical hash has a predictable shape.
+        // copy_into_slice requires a slice of exactly len() bytes.
+        let sender_len = d.sender.len() as usize;
+        let copy_len = core::cmp::min(sender_len, 32usize);
+        let mut sender_arr = [0u8; 32];
+        let mut tmp_sender = [0u8; 64];
+        d.sender.copy_into_slice(&mut tmp_sender[..sender_len]);
+        sender_arr[..copy_len].copy_from_slice(&tmp_sender[..copy_len]);
+        buf.extend_from_slice(&sender_arr);
+        // Encode the recipient Stellar address as its strkey representation
+        // into a fixed 56-byte buffer (G-address strkeys are 56 chars).
+        // String::copy_into_slice requires a slice of exactly len() bytes.
         let recipient_str = d.recipient.to_string();
+        let str_len = recipient_str.len() as usize;
+        let copy_len = core::cmp::min(str_len, 56usize);
         let mut recipient_bytes = [0u8; 56];
-        let copy_len = core::cmp::min(recipient_str.len(), recipient_bytes.len());
-        recipient_bytes[..copy_len].copy_from_slice(&recipient_str.as_bytes()[..copy_len]);
+        // Copy exactly str_len bytes into a temporary buffer, then take copy_len.
+        let mut tmp = [0u8; 64];
+        recipient_str.copy_into_slice(&mut tmp[..str_len]);
+        recipient_bytes[..copy_len].copy_from_slice(&tmp[..copy_len]);
         buf.extend_from_slice(&recipient_bytes);
         buf.extend_from_slice(&d.amount.to_le_bytes());
         buf.extend_from_slice(&d.nonce.to_le_bytes());

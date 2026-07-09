@@ -9,7 +9,7 @@
 //! can mint shares sold in a crowdfunding round.
 
 use soroban_sdk::{
-    contract, contractimpl, contracterror, contracttype, symbol_short, Address, Env, String, Symbol,
+    contract, contracterror, contractimpl, contracttype, symbol_short, Address, Env, String,
 };
 
 // ============================================================================
@@ -359,12 +359,16 @@ impl RwaToken {
             .persistent()
             .set(&DataKey::Balance(to.clone()), &new_to);
         // Touch a TTL key so balances persist.
-        env.storage()
-            .persistent()
-            .extend_ttl(&DataKey::Balance(from.clone()), 172_800u32, 7_776_000u32);
-        env.storage()
-            .persistent()
-            .extend_ttl(&DataKey::Balance(to.clone()), 172_800u32, 7_776_000u32);
+        env.storage().persistent().extend_ttl(
+            &DataKey::Balance(from.clone()),
+            172_800u32,
+            7_776_000u32,
+        );
+        env.storage().persistent().extend_ttl(
+            &DataKey::Balance(to.clone()),
+            172_800u32,
+            7_776_000u32,
+        );
         Ok(())
     }
 
@@ -372,8 +376,8 @@ impl RwaToken {
     // Version
     // --------------------------------------------------------------------
 
-    pub fn version() -> Symbol {
-        Symbol::new(&Env::default(), env!("CARGO_PKG_VERSION"))
+    pub fn version() -> String {
+        String::from_str(&Env::default(), env!("CARGO_PKG_VERSION"))
     }
 }
 

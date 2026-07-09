@@ -179,10 +179,10 @@ fn test_set_operator_admin_only() {
 #[test]
 fn test_version_returns_cargo_pkg_version() {
     // `version()` is a pure function that returns the crate version baked
-    // in at compile time. We verify it round-trips as a Symbol.
+    // in at compile time. We verify it round-trips as a String.
     let env = Env::default();
     let version = RwaToken::version();
-    // Sanity check: Symbol round-trips correctly through the Env.
-    let round_tripped = soroban_sdk::Symbol::new(&env, env!("CARGO_PKG_VERSION"));
+    // Sanity check: String round-trips correctly through the Env.
+    let round_tripped = soroban_sdk::String::from_str(&env, env!("CARGO_PKG_VERSION"));
     assert_eq!(version, round_tripped);
 }

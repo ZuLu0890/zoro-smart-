@@ -1,7 +1,7 @@
 #![cfg(test)]
 
-use super::*;
-use soroban_sdk::{testutils::Address as _, BytesN, Env};
+use crate::{BridgeWrapper, BridgeWrapperClient, DepositMessage};
+use soroban_sdk::{testutils::Address as _, Address, BytesN, Env};
 
 #[test]
 fn test_initialize_stores_admin() {
