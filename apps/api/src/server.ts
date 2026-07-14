@@ -15,6 +15,7 @@ import { yieldRoutes } from './routes/yield.js';
 import { streamRoutes } from './routes/stream.js';
 import { governanceRoutes } from './routes/governance.js';
 import { portfolioRoutes } from './routes/portfolio.js';
+import { notificationRoutes } from './routes/notifications.js';
 
 export async function buildServer(): Promise<FastifyInstance> {
   // A custom pino childlogger is supplied via `loggerInstance`; the
@@ -50,6 +51,7 @@ export async function buildServer(): Promise<FastifyInstance> {
         { name: 'stream' },
         { name: 'governance' },
         { name: 'portfolio' },
+        { name: 'notifications' },
       ],
     },
   });
@@ -63,6 +65,7 @@ export async function buildServer(): Promise<FastifyInstance> {
   await app.register(streamRoutes, { prefix: '/api' });
   await app.register(governanceRoutes, { prefix: '/api' });
   await app.register(portfolioRoutes, { prefix: '/api' });
+  await app.register(notificationRoutes, { prefix: '/api' });
 
   app.setErrorHandler((error: unknown, request, reply) => {
     logger.error({ err: error, url: request.url }, 'request failed');
