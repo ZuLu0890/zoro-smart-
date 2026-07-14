@@ -383,6 +383,116 @@ impl RwaToken {
     }
 
     // --------------------------------------------------------------------
+    // Clawback (admin)
+    // --------------------------------------------------------------------
+
+    /// Admin-forced token recovery from any account for regulatory compliance.
+    pub fn clawback(
+        env: Env,
+        from: Address,
+        amount: i128,
+    ) -> Result<(), TokenError> {
+        if amount <= 0 {
+            return Err(TokenError::ZeroAmount);
+        }
+        let admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .ok_or(TokenError::NotInitialized)?;
+        admin.require_auth();
+        let balance: i128 = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Balance(from.clone()))
+            .unwrap_or(0);
+        if balance < amount {
+            return Err(TokenError::InsufficientBalance);
+        }
+        env.storage()
+            .persistent()
+            .set(&DataKey::Balance(from.clone()), &(balance - amount));
+        let total = env
+            .storage()
+            .instance()
+            .get(&DataKey::TotalSupply)
+            .unwrap_or(0i128);
+        env.storage()
+            .instance()
+            .set(&DataKey::TotalSupply, &(total - amount));
+        env.events()
+            .publish((symbol_short!("clawback"), from, admin), amount);
+        Ok(())
+    }
+
+    // --------------------------------------------------------------------
+    // Global pause (admin)
+    // --------------------------------------------------------------------
+
+    /// Pause all token transfers globally. Admin only.
+    pub fn pause(env: Env) -> Result<(), TokenError> {
+        let admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .ok_or(TokenError::NotInitialized)?;
+        admin.require_auth();
+        env.storage().instance().set(&DataKey::Paused, &true);
+        env.events().publish((symbol_short!("pause"),), ());
+        Ok(())
+    }
+
+    /// Resume token transfers. Admin only.
+    pub fn unpause(env: Env) -> Result<(), TokenError> {
+        let admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .ok_or(TokenError::NotInitialized)?;
+        admin.require_auth();
+        env.storage().instance().set(&DataKey::Paused, &false);
+        env.events().publish((symbol_short!("unpause"),), ());
+        Ok(())
+    }
+
+    /// Query whether transfers are currently paused.
+    pub fn paused(env: Env) -> bool {
+        env.storage()
+            .instance()
+            .get(&DataKey::Paused)
+            .unwrap_or(false)
+    }
+
+    // --------------------------------------------------------------------
+    // Supply cap (admin)
+    // --------------------------------------------------------------------
+
+    /// Set a maximum token supply. 0 = unlimited. Admin only.
+    pub fn set_supply_cap(env: Env, cap: i128) -> Result<(), TokenError> {
+        let admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .ok_or(TokenError::NotInitialized)?;
+        admin.require_auth();
+        if cap < 0 {
+            return Err(TokenError::MathOverflow);
+        }
+        env.storage().instance().set(&DataKey::SupplyCap, &cap);
+        env.events()
+            .publish((symbol_short!("supply_cap"),), cap);
+        Ok(())
+    }
+
+    /// Return the current supply cap (0 = unlimited).
+    pub fn supply_cap(env: Env) -> i128 {
+        env.storage()
+            .instance()
+            .get(&DataKey::SupplyCap)
+            .unwrap_or(0i128)
+    }
+
+    // --------------------------------------------------------------------
     // Internal helpers
     // --------------------------------------------------------------------
 
