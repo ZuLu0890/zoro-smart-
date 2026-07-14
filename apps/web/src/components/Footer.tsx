@@ -1,4 +1,5 @@
 import { Github } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 export function Footer() {
   return (
@@ -9,6 +10,8 @@ export function Footer() {
           Open-source under Apache-2.0
         </div>
         <div className="flex items-center gap-4">
+          <Link to="/faq" className="hover:text-white transition-colors">FAQ</Link>
+          <Link to="/docs" className="hover:text-white transition-colors">Docs</Link>
           <span className="hidden md:inline">v0.1.0 · testnet</span>
           <a
             className="inline-flex items-center gap-1 hover:text-white"
