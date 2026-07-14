@@ -460,7 +460,7 @@ impl SolarRegistry {
             .unwrap_or(Vec::new(&env));
         let mut results = Vec::new(&env);
         for id in index.iter() {
-            if let Ok(array) = env
+            if let Some(array) = env
                 .storage()
                 .persistent()
                 .get::<DataKey, SolarArray>(&DataKey::Array(id.clone()))
@@ -482,7 +482,7 @@ impl SolarRegistry {
             .unwrap_or(Vec::new(&env));
         let mut results = Vec::new(&env);
         for id in index.iter() {
-            if let Ok(array) = env
+            if let Some(array) = env
                 .storage()
                 .persistent()
                 .get::<DataKey, SolarArray>(&DataKey::Array(id.clone()))
@@ -504,7 +504,7 @@ impl SolarRegistry {
             .unwrap_or(Vec::new(&env));
         let mut total: u64 = 0;
         for id in index.iter() {
-            if let Ok(array) = env
+            if let Some(array) = env
                 .storage()
                 .persistent()
                 .get::<DataKey, SolarArray>(&DataKey::Array(id.clone()))
@@ -526,7 +526,7 @@ impl SolarRegistry {
             .unwrap_or(Vec::new(&env));
         let mut counts: soroban_sdk::Map<u32, u32> = soroban_sdk::Map::new(&env);
         for id in index.iter() {
-            if let Ok(array) = env
+            if let Some(array) = env
                 .storage()
                 .persistent()
                 .get::<DataKey, SolarArray>(&DataKey::Array(id.clone()))
@@ -543,7 +543,7 @@ impl SolarRegistry {
     // Maintenance log
     // --------------------------------------------------------------------
 
-    /// Record a maintenance event for an array. Verifier or operator may call.
+    /// Record a maintenance event for an array. Verifier only.
     pub fn record_maintenance(
         env: Env,
         array_id: BytesN<32>,
@@ -554,20 +554,16 @@ impl SolarRegistry {
             .instance()
             .get(&DataKey::Verifier)
             .ok_or(RegistryError::NotInitialized)?;
-        let array: SolarArray = env
-            .storage()
+        // Ensure the array exists.
+        env.storage()
             .persistent()
-            .get(&DataKey::Array(array_id.clone()))
+            .get::<DataKey, SolarArray>(&DataKey::Array(array_id.clone()))
             .ok_or(RegistryError::ArrayNotFound)?;
-        // Allow verifier OR the array's own operator.
-        if !Self::is_authorised(&env, &verifier) && !Self::is_authorised(&env, &array.operator) {
-            return Err(RegistryError::Unauthorized);
-        }
         verifier.require_auth();
         let event = MaintenanceEvent {
             timestamp: env.ledger().timestamp(),
             description,
-            performed_by: verifier,
+            performed_by: verifier.clone(),
         };
         let mut log: Vec<MaintenanceEvent> = env
             .storage()
