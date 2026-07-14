@@ -45,6 +45,10 @@ pub enum BridgeError {
     MathOverflow = 8,
     /// Validator set is below the configured threshold for the chain.
     QuorumNotMet = 9,
+    /// Bridge operations are paused.
+    BridgePaused = 10,
+    /// Chain is not active.
+    ChainInactive = 11,
 }
 
 // ============================================================================
@@ -67,6 +71,10 @@ pub enum DataKey {
     Minted(Address),
     /// Total burned per wrapped token (for analytics).
     Burned(Address),
+    /// Global pause flag.
+    Paused,
+    /// Whether a chain is active (enabled).
+    ChainActive(u32),
 }
 
 // ============================================================================
@@ -120,6 +128,7 @@ impl BridgeWrapper {
         }
         admin.require_auth();
         env.storage().instance().set(&DataKey::Admin, &admin);
+        env.storage().instance().set(&DataKey::Paused, &false);
         env.events().publish((symbol_short!("init"),), admin);
         Ok(())
     }
@@ -165,6 +174,84 @@ impl BridgeWrapper {
             .unwrap_or(0)
     }
 
+    /// Return combined chain info: validators + threshold + active flag.
+    pub fn chain_info(
+        env: Env,
+        chain_id: u32,
+    ) -> (Vec<Address>, u32, bool) {
+        let validators = Self::get_validators(env.clone(), chain_id);
+        let threshold = Self::get_threshold(env.clone(), chain_id);
+        let active = env
+            .storage()
+            .persistent()
+            .get(&DataKey::ChainActive(chain_id))
+            .unwrap_or(false);
+        (validators, threshold, active)
+    }
+
+    /// Remove a specific validator from a chain's set. Admin only.
+    pub fn remove_validator(
+        env: Env,
+        chain_id: u32,
+        validator: Address,
+    ) -> Result<(), BridgeError> {
+        Self::require_admin(&env)?;
+        let mut validators = Self::get_validators(env.clone(), chain_id);
+        let mut new_set = Vec::new(&env);
+        let mut found = false;
+        for v in validators.iter() {
+            if v == validator {
+                found = true;
+            } else {
+                new_set.push_back(v);
+            }
+        }
+        if !found {
+            return Err(BridgeError::Unauthorized);
+        }
+        let current_threshold = Self::get_threshold(env.clone(), chain_id);
+        let new_threshold = core::cmp::min(current_threshold, new_set.len() as u32);
+        env.storage()
+            .persistent()
+            .set(&DataKey::Validators(chain_id), &new_set);
+        env.storage()
+            .persistent()
+            .set(&DataKey::Threshold(chain_id), &new_threshold);
+        Ok(())
+    }
+
+    /// Update the threshold for a chain. Admin only.
+    pub fn update_threshold(
+        env: Env,
+        chain_id: u32,
+        new_threshold: u32,
+    ) -> Result<(), BridgeError> {
+        Self::require_admin(&env)?;
+        let validators = Self::get_validators(env.clone(), chain_id);
+        if new_threshold == 0 || new_threshold > validators.len() {
+            return Err(BridgeError::QuorumNotMet);
+        }
+        env.storage()
+            .persistent()
+            .set(&DataKey::Threshold(chain_id), &new_threshold);
+        Ok(())
+    }
+
+    /// Enable or disable a chain. Admin only.
+    pub fn set_chain_active(
+        env: Env,
+        chain_id: u32,
+        active: bool,
+    ) -> Result<(), BridgeError> {
+        Self::require_admin(&env)?;
+        env.storage()
+            .persistent()
+            .set(&DataKey::ChainActive(chain_id), &active);
+        env.events()
+            .publish((symbol_short!("chain_active"),), (chain_id, active));
+        Ok(())
+    }
+
     // --------------------------------------------------------------------
     // Admin: token bindings
     // --------------------------------------------------------------------
@@ -189,7 +276,100 @@ impl BridgeWrapper {
         env.storage()
             .persistent()
             .set(&DataKey::TokenBinding(key), &wrapped_token);
+        env.storage()
+            .persistent()
+            .set(&DataKey::Minted(wrapped_token), &0i128);
+        env.storage()
+            .persistent()
+            .set(&DataKey::Burned(wrapped_token), &0i128);
         Ok(())
+    }
+
+    /// Remove a token binding. Admin only.
+    pub fn unbind_token(
+        env: Env,
+        chain_id: u32,
+        source_token: BytesN<32>,
+    ) -> Result<(), BridgeError> {
+        Self::require_admin(&env)?;
+        let key = Self::binding_key(&env, chain_id, &source_token);
+        if !env
+            .storage()
+            .persistent()
+            .has(&DataKey::TokenBinding(key.clone()))
+        {
+            return Err(BridgeError::UnknownToken);
+        }
+        env.storage()
+            .persistent()
+            .remove(&DataKey::TokenBinding(key));
+        Ok(())
+    }
+
+    /// Get the wrapped token address for a (chain_id, source_token) pair.
+    pub fn get_wrapped_token(
+        env: Env,
+        chain_id: u32,
+        source_token: BytesN<32>,
+    ) -> Result<Address, BridgeError> {
+        let key = Self::binding_key(&env, chain_id, &source_token);
+        env.storage()
+            .persistent()
+            .get(&DataKey::TokenBinding(key))
+            .ok_or(BridgeError::UnknownToken)
+    }
+
+    /// Return total minted for a wrapped token.
+    pub fn total_minted(env: Env, wrapped_token: Address) -> i128 {
+        env.storage()
+            .persistent()
+            .get(&DataKey::Minted(wrapped_token))
+            .unwrap_or(0i128)
+    }
+
+    /// Return total burned for a wrapped token.
+    pub fn total_burned(env: Env, wrapped_token: Address) -> i128 {
+        env.storage()
+            .persistent()
+            .get(&DataKey::Burned(wrapped_token))
+            .unwrap_or(0i128)
+    }
+
+    // --------------------------------------------------------------------
+    // Admin: role + pause
+    // --------------------------------------------------------------------
+
+    /// Transfer admin role. Current admin only.
+    pub fn set_admin(env: Env, new_admin: Address) -> Result<(), BridgeError> {
+        Self::require_admin(&env)?;
+        env.storage().instance().set(&DataKey::Admin, &new_admin);
+        env.events()
+            .publish((symbol_short!("set_admin"),), new_admin);
+        Ok(())
+    }
+
+    /// Pause all bridge operations. Admin only.
+    pub fn pause(env: Env) -> Result<(), BridgeError> {
+        Self::require_admin(&env)?;
+        env.storage().instance().set(&DataKey::Paused, &true);
+        env.events().publish((symbol_short!("pause"),), ());
+        Ok(())
+    }
+
+    /// Resume bridge operations. Admin only.
+    pub fn unpause(env: Env) -> Result<(), BridgeError> {
+        Self::require_admin(&env)?;
+        env.storage().instance().set(&DataKey::Paused, &false);
+        env.events().publish((symbol_short!("unpause"),), ());
+        Ok(())
+    }
+
+    /// Query whether the bridge is paused.
+    pub fn paused(env: Env) -> bool {
+        env.storage()
+            .instance()
+            .get(&DataKey::Paused)
+            .unwrap_or(false)
     }
 
     // --------------------------------------------------------------------
@@ -205,6 +385,26 @@ impl BridgeWrapper {
     ) -> Result<(), BridgeError> {
         if deposit.amount <= 0 {
             return Err(BridgeError::MathOverflow);
+        }
+
+        // Check global pause.
+        if env
+            .storage()
+            .instance()
+            .get(&DataKey::Paused)
+            .unwrap_or(false)
+        {
+            return Err(BridgeError::BridgePaused);
+        }
+
+        // Check chain is active.
+        let chain_active: bool = env
+            .storage()
+            .persistent()
+            .get(&DataKey::ChainActive(deposit.chain_id))
+            .unwrap_or(false);
+        if !chain_active {
+            return Err(BridgeError::ChainInactive);
         }
 
         // Replay guard.
@@ -310,8 +510,26 @@ impl BridgeWrapper {
         }
         sender.require_auth();
 
-        // We don't actually burn here for the scaffold — production will
-        // cross-contract invoke `burn` on the wrapped token contract.
+        // Check global pause.
+        if env
+            .storage()
+            .instance()
+            .get(&DataKey::Paused)
+            .unwrap_or(false)
+        {
+            return Err(BridgeError::BridgePaused);
+        }
+
+        // Check chain is active.
+        let chain_active: bool = env
+            .storage()
+            .persistent()
+            .get(&DataKey::ChainActive(request.chain_id))
+            .unwrap_or(false);
+        if !chain_active {
+            return Err(BridgeError::ChainInactive);
+        }
+
         env.events().publish(
             (symbol_short!("unwrap"), sender.clone()),
             (request.chain_id, request.amount, request.nonce),
