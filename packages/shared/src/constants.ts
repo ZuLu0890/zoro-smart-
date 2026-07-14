@@ -112,3 +112,34 @@ export const PROJECT_INFO = {
     'A Soroban-powered Real World Asset (RWA) engine for crowdfunded urban solar arrays, with cross-chain wrapping middleware.',
   repoUrl: 'https://github.com/solshare-network/solshare-network',
 } as const;
+
+/** Governance constants for the SolShare protocol. */
+export const GOVERNANCE = {
+  DEFAULT_VOTING_PERIOD_SECONDS: 604_800, // 7 days
+  DEFAULT_EXECUTION_DELAY_SECONDS: 86_400, // 1 day
+  DEFAULT_QUORUM_PERCENT: 20, // 20% of total voting power
+  DEFAULT_PASS_THRESHOLD_PERCENT: 60, // 60% of cast votes (excluding abstain)
+  MIN_PROPOSAL_THRESHOLD_XLM: '10000', // in stroops
+  MAX_PROPOSALS_PER_VOTER: 5,
+} as const;
+
+export const PROPOSAL_TYPES = [
+  'ParameterChange',
+  'OperatorUpdate',
+  'FeeUpdate',
+  'MaintenanceSchedule',
+  'ArrayExpansion',
+  'TreasuryAllocation',
+  'General',
+] as const;
+
+export const VOTE_CHOICES = ['For', 'Against', 'Abstain'] as const;
+
+export const PROPOSAL_STATUSES = [
+  'Draft',
+  'Active',
+  'Passed',
+  'Rejected',
+  'Executed',
+  'Cancelled',
+] as const;
