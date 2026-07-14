@@ -1,11 +1,12 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Sun, ArrowLeftRight, Coins, Info, Sparkles } from 'lucide-react';
+import { LayoutDashboard, Sun, ArrowLeftRight, Coins, Info, Sparkles, Vote } from 'lucide-react';
 
 const items = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/arrays', label: 'Arrays', icon: Sun },
   { to: '/bridge', label: 'Bridge', icon: ArrowLeftRight },
   { to: '/yield', label: 'Yield', icon: Coins },
+  { to: '/governance', label: 'Governance', icon: Vote },
   { to: '/about', label: 'About', icon: Info },
 ] as const;
 

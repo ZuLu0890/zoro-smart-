@@ -10,6 +10,7 @@ const ArrayDetail = lazy(() => import('./pages/ArrayDetail.tsx'));
 const Bridge = lazy(() => import('./pages/Bridge.tsx'));
 const Yield = lazy(() => import('./pages/Yield.tsx'));
 const About = lazy(() => import('./pages/About.tsx'));
+const Governance = lazy(() => import('./pages/Governance.tsx'));
 
 export const router: ReturnType<typeof createBrowserRouter> = createBrowserRouter([
   {
@@ -40,6 +41,10 @@ export const router: ReturnType<typeof createBrowserRouter> = createBrowserRoute
       {
         path: 'about',
         element: <Suspense fallback={<RouteFallback />}><About /></Suspense>,
+      },
+      {
+        path: 'governance',
+        element: <Suspense fallback={<RouteFallback />}><Governance /></Suspense>,
       },
     ],
   },

@@ -24,6 +24,7 @@ export function Header() {
             { to: '/arrays', label: 'Arrays' },
             { to: '/bridge', label: 'Bridge' },
             { to: '/yield', label: 'Yield' },
+            { to: '/governance', label: 'Governance' },
             { to: '/about', label: 'About' },
           ].map(({ to, label }) => (
             <NavLink
