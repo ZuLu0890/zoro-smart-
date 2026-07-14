@@ -15,6 +15,7 @@ import {
   SolarRegistryContract,
   YieldDistributorContract,
   BridgeWrapperContract,
+  GovernanceClient,
 } from './contracts/index.js';
 import { SimulationAccount, fundSimulationAccount } from './simulation-account.js';
 
@@ -44,6 +45,7 @@ export interface ContractAddresses {
   solarRegistry: string;
   yieldDistributor: string;
   bridgeWrapper: string;
+  governance: string;
 }
 
 const DEFAULT_ADDRESSES: ContractAddresses = {
@@ -51,6 +53,7 @@ const DEFAULT_ADDRESSES: ContractAddresses = {
   solarRegistry: '',
   yieldDistributor: '',
   bridgeWrapper: '',
+  governance: '',
 };
 
 /**
@@ -74,6 +77,7 @@ export class SolShareClient {
   readonly rwaToken: RwaTokenContract;
   readonly yieldDistributor: YieldDistributorContract;
   readonly bridge: BridgeWrapperContract;
+  readonly governance: GovernanceClient;
 
   constructor(opts: SolShareClientOptions = {}) {
     this.network = resolveNetwork(opts.network ?? process.env.STELLAR_NETWORK);
@@ -123,6 +127,12 @@ export class SolShareClient {
       this.networkPassphrase,
       this.simulationAccount,
     );
+    this.governance = new GovernanceClient(
+      this.contracts.governance,
+      this.sorobanRpcUrl,
+      this.networkPassphrase,
+      this.simulationAccount,
+    );
   }
 
   static forTestnet(): SolShareClient {
@@ -161,6 +171,7 @@ export class SolShareClient {
     this.rwaToken.setSimulationAccount(account);
     this.yieldDistributor.setSimulationAccount(account);
     this.bridge.setSimulationAccount(account);
+    this.governance.setSimulationAccount(account);
   }
 
   /**
