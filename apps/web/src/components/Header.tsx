@@ -2,6 +2,7 @@ import { Link, NavLink } from 'react-router-dom';
 import { useStellar } from '../contexts/StellarProvider';
 import { ConnectButton } from './ConnectButton';
 import { NetworkPill } from './NetworkPill';
+import { NotificationBell } from './NotificationBell';
 import { Sun } from 'lucide-react';
 
 export function Header() {
@@ -46,6 +47,7 @@ export function Header() {
 
         <div className="ml-auto flex items-center gap-3">
           <NetworkPill />
+          <NotificationBell />
           <ConnectButton compact={false} />
           {publicKey && (
             <span className="hidden lg:inline text-xs font-mono text-ink-400">
