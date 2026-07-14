@@ -6,3 +6,4 @@ export * from './governance.js';
 export * from './portfolio.js';
 export * from './notifications.js';
 export * from './search.js';
+export * from './analytics.js';
