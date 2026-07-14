@@ -20,7 +20,7 @@ export function Sidebar() {
         </div>
         <div className="hidden xl:block">
           <div className="text-sm font-semibold">SolShare</div>
-          <div className="text-[10px] uppercase tracking-widest text-ink-400">v0.1 · testnet</div>
+          <div className="text-[10px] uppercase tracking-widest text-ink-400">v0.2 · testnet</div>
         </div>
       </div>
       <nav className="px-2 xl:px-3 flex flex-col gap-1">
