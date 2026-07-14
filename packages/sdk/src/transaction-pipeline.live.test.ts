@@ -1,10 +1,20 @@
 /**
  * Live integration test for `TransactionPipeline` against the public
- * Stellar TESTNET. Exercises the full lifecycle:
+ * Stellar TESTNET. Drives the full lifecycle end-to-end:
  *
- *   build envelope -> `rpc.prepareTransaction` (footprint + bumped fee) ->
- *   sign with a hot-loaded `Keypair` -> `rpc.sendTransaction` ->
+ *   build -> `rpc.prepareTransaction` (footprint + bumped fee) ->
+ *   sign (in-process via Keypair) -> `rpc.sendTransaction` ->
  *   `rpc.getTransaction` polling
+ *
+ * Real network interaction steps:
+ *   1. Friendbot funds a freshly generated keypair via
+ *      `SimulationAccount` + `fundSimulationAccount`.
+ *   2. Horizon `/accounts/<addr>` for the on-network sequence number.
+ *   3. Soroban RPC `prepareTransaction` for the Native XLM Stellar Asset
+ *      Contract's read-only `name()` method (no auth required).
+ *   4. The signed envelope is posted to the Soroban mempool via
+ *      `rpc.sendTransaction`.
+ *   5. The pipeline polls `rpc.getTransaction` until the result lands.
  *
  * Gated on `RUN_LIVE_TESTS !== '1'` so CI doesn't hit the network by
  * default. Enable with:
@@ -13,19 +23,20 @@
  *
  * Override endpoints with `TESTNET_HORIZON_URL` and
  * `TESTNET_SOROBAN_RPC` if you need to point at a local standalone
- * network or a custom RPC.
+ * network.
  */
 
 import { describe, it, expect } from 'vitest';
 import {
+  Contract,
   Keypair,
-  Operation,
   Transaction,
   xdr,
 } from '@stellar/stellar-sdk';
 
-import { SimulationAccount, fundSimulationAccount } from '../src/simulation-account.js';
-import { TransactionPipeline } from '../src/transaction-pipeline.js';
+import { SimulationAccount, fundSimulationAccount } from './simulation-account.js';
+import { TransactionPipeline } from './transaction-pipeline.js';
+import { withRetry } from './retry.js';
 
 const HORIZON_URL =
   process.env.TESTNET_HORIZON_URL ?? 'https://horizon-testnet.stellar.org';
@@ -33,40 +44,72 @@ const RPC_URL =
   process.env.TESTNET_SOROBAN_RPC ?? 'https://soroban-testnet.stellar.org';
 const NETWORK_PASSPHRASE = 'Test SDF Network ; September 2015';
 const LIVE = process.env.RUN_LIVE_TESTS === '1';
+// Native XLM Stellar Asset Contract on testnet. The address is
+// deterministic from the network passphrase + asset identifier, so it is
+// stable across testnet restarts and does not require user auth for
+// read-only calls like `name()`.
+const XLM_SAC_TESTNET =
+  'CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC';
 const POLL_ATTEMPTS = 30;
 const POLL_INTERVAL_MS = 1500;
 
-function wait(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+async function fetchWithRetry(
+  url: string,
+  attempts = 10,
+  initialDelayMs = 1_000,
+): Promise<Response> {
+  return withRetry(
+    async () => {
+      const res = await fetch(url);
+      if (!res.ok) {
+        throw new Error(`fetch ${url} failed: ${res.status}`);
+      }
+      return res;
+    },
+    {
+      attempts,
+      initialDelayMs,
+      shouldRetry: (err: unknown) => {
+        if (!(err instanceof Error)) return false;
+        const m = err.message;
+        return (
+          m.includes('404') || m.includes('500') || m.includes('502') || m.includes('503')
+        );
+      },
+    },
+  );
 }
 
 describe.skipIf(!LIVE)(
   'TransactionPipeline live testnet integration',
   () => {
     it(
-      'drives prepare -> sign -> send -> poll against Soroban testnet',
+      'runs prepare -> sign -> send -> poll against the public Soroban testnet',
       async () => {
-        // 1. Generate a fresh signer, funded through Friendbot.
+        // 1. Generate a fresh signer, funded through Friendbot. Friendbot
+        //    rate-limits occasionally, so wrap in withRetry.
         const account = SimulationAccount.random();
         if (!account.secretKey) {
           throw new Error(
             'SimulationAccount.random() must return a keypair with a secret',
           );
         }
-        await fundSimulationAccount(account, 'TESTNET');
-        // Friendbot funding typically takes ~5s to propagate on testnet.
-        await wait(5_000);
-
-        // 2. Pull the actual on-network sequence number from Horizon so
-        //    the RPC doesn't reject the submitted transaction with BadSeq.
-        const acctRes = await fetch(
-          `${HORIZON_URL}/accounts/${account.publicKey}`,
+        await withRetry(
+          async () => fundSimulationAccount(account, 'TESTNET'),
+          { attempts: 3, initialDelayMs: 2_000, factor: 2 },
         );
-        expect(acctRes.ok).toBe(true);
+
+        // 2. Poll Horizon until the funded account appears. Friendbot
+        //    funding typically propagates within ~5 s but can be slower.
+        const acctRes = await fetchWithRetry(
+          `${HORIZON_URL}/accounts/${account.publicKey}`,
+          15,
+          2_000,
+        );
         const acctJson = (await acctRes.json()) as { sequence: string };
         const sequenceNumber = acctJson.sequence;
 
-        // 3. Wire up the pipeline against the public Soroban testnet RPC.
+        // 3. Wire the pipeline to public Soroban testnet RPC.
         const pipeline = new TransactionPipeline({
           sorobanRpcUrl: RPC_URL,
           networkPassphrase: NETWORK_PASSPHRASE,
@@ -83,11 +126,12 @@ describe.skipIf(!LIVE)(
           return t.toEnvelope().toXDR().toString('base64');
         };
 
-        // 5. A benign classic op — setOptions.homeDomain — that exercises
-        //    a real write path without requiring a Soroban contract.
-        const op = Operation.setOptions({ homeDomain: 'solshare.dev' });
+        // 5. Read-only `name()` call on the native XLM SAC. No args, no
+        //    auth required; survives a successful end-to-end pipeline
+        //    pass without pre-existing trustlines.
+        const op = new Contract(XLM_SAC_TESTNET).call('name');
 
-        // 6. Drive prepare -> sign -> send -> poll.
+        // 6. Drive the full prepare -> sign -> send -> poll pipeline.
         const result = await pipeline.signAndSubmit({
           operations: [op],
           submitterPublicKey: account.publicKey,
@@ -99,17 +143,19 @@ describe.skipIf(!LIVE)(
           },
         });
 
-        // 7. Validate the envelope shape + status.
+        // 7. Validate envelope + status. Only SUCCESS proves a clean
+        //    lifecycle (PENDING/FAILED likely indicate BadSeq, auth,
+        //    or other SDK regressions, so we surface them loudly).
         expect(result.hash).toMatch(/^[0-9a-f]{64}$/);
         expect(result.envelopeXdr.length).toBeGreaterThan(0);
-        expect(['SUCCESS', 'PENDING']).toContain(result.status);
-
-        if (result.status === 'SUCCESS') {
-          expect(result.resultXdr).toBeTruthy();
+        if (result.status !== 'SUCCESS') {
+          throw new Error(
+            `Expected SUCCESS after the full lifecycle, got status=${result.status} hash=${result.hash}`,
+          );
         }
       },
-      // Friendbot wait (5s) + 30 polling attempts at 1.5s each + RPC overhead.
-      90_000,
+      // Friendbot (with backoff) + 30 polls × 1.5 s + RPC overhead.
+      120_000,
     );
   },
 );
