@@ -1,12 +1,18 @@
 export interface YieldDistribution {
   distributorId: string;
-  shareToken: string; // Soroban contract address
-  paymentToken: string; // Soroban contract address
+  shareToken: string;
+  paymentToken: string;
   totalFunded: string;
   totalClaimed: string;
   yieldPerShare: string;
   lastFundedAt: number;
   funder: string;
+  /** Whether claims are currently paused. */
+  paused: boolean;
+  /** Minimum claimable amount threshold. */
+  minClaimAmount: string;
+  /** Number of funding events processed. */
+  fundingCount: number;
 }
 
 export interface YieldClaim {
@@ -25,4 +31,10 @@ export interface HolderYield {
   claimable: string;
   paidYieldPerShare: string;
   globalYieldPerShare: string;
+}
+
+export interface YieldBatchItem {
+  holder: string;
+  claimable: string;
+  claimed: string;
 }
