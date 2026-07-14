@@ -1,10 +1,12 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import { sql, desc, eq, gte, and } from 'drizzle-orm';
 import type {
   VolumeAnalytics,
   TopArraysResponse,
   YieldProjection,
 } from '@solshare/shared';
+import { getDb, arrays, bridgeTxs } from '../lib/db.js';
 import { getClient } from '../lib/stellar.js';
 import { cache } from '../lib/cache.js';
 
@@ -14,11 +16,11 @@ const volumeQuery = z.object({
 
 const topQuery = z.object({
   limit: z.coerce.number().int().min(1).max(20).default(5),
-  sort: z.enum(['capacity', 'yield', 'shares']).default('yield'),
+  sort: z.enum(['capacity', 'yield']).default('yield'),
 });
 
 export async function analyticsRoutes(app: FastifyInstance) {
-  /** Bridge volume analytics over a time window. */
+  /** Bridge volume analytics — aggregated from indexed bridge_txs. */
   app.get<{ Querystring: { days?: string } }>(
     '/analytics/volume',
     async (request) => {
@@ -29,12 +31,78 @@ export async function analyticsRoutes(app: FastifyInstance) {
       const cached = await cache.get<VolumeAnalytics>(cacheKey);
       if (cached) return cached;
 
+      const db = getDb();
+      const cutoff = new Date(Date.now() - days * 86400 * 1000);
+
+      // Total wraps / unwraps + aggregate amount.
+      const [totals] = await db
+        .select({
+          totalWraps: sql<number>`count(*) filter (where ${eq(bridgeTxs.direction, 'wrap')})::int`,
+          totalUnwraps: sql<number>`count(*) filter (where ${eq(bridgeTxs.direction, 'unwrap')})::int`,
+          totalVolume: sql<string>`coalesce(sum(${sql.raw('amount::numeric')})::text, '0')`,
+        })
+        .from(bridgeTxs)
+        .where(
+          and(
+            gte(bridgeTxs.createdAt, cutoff),
+            eq(bridgeTxs.status, 'minted'),
+          ),
+        );
+
+      // Daily volume breakdown.
+      const dailyRows = await db
+        .select({
+          date: sql<string>`to_char(${bridgeTxs.createdAt}, 'YYYY-MM-DD')`,
+          volume: sql<string>`coalesce(sum(${sql.raw('amount::numeric')})::text, '0')`,
+          wraps: sql<number>`count(*) filter (where ${eq(bridgeTxs.direction, 'wrap')})::int`,
+          unwraps: sql<number>`count(*) filter (where ${eq(bridgeTxs.direction, 'unwrap')})::int`,
+        })
+        .from(bridgeTxs)
+        .where(
+          and(
+            gte(bridgeTxs.createdAt, cutoff),
+            eq(bridgeTxs.status, 'minted'),
+          ),
+        )
+        .groupBy(sql`to_char(${bridgeTxs.createdAt}, 'YYYY-MM-DD')`)
+        .orderBy(sql`to_char(${bridgeTxs.createdAt}, 'YYYY-MM-DD')`);
+
+      // Top chains by volume.
+      const chainRows = await db
+        .select({
+          chain: bridgeTxs.sourceChain,
+          volume: sql<string>`coalesce(sum(${sql.raw('amount::numeric')})::text, '0')`,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(bridgeTxs)
+        .where(
+          and(
+            gte(bridgeTxs.createdAt, cutoff),
+            eq(bridgeTxs.status, 'minted'),
+          ),
+        )
+        .groupBy(bridgeTxs.sourceChain)
+        .orderBy(desc(sql`sum(${sql.raw('amount::numeric')})`))
+        .limit(10);
+
+      const totalVolume = totals?.totalVolume ?? '0';
+      const totalVolumeNum = Number(totalVolume);
+
       const resp: VolumeAnalytics = {
-        totalBridgeVolumeUsdc: '0',
-        totalWraps: 0,
-        totalUnwraps: 0,
-        daily: [],
-        topChains: [],
+        totalBridgeVolumeUsdc: totalVolume,
+        totalWraps: totals?.totalWraps ?? 0,
+        totalUnwraps: totals?.totalUnwraps ?? 0,
+        daily: dailyRows.map((r) => ({
+          date: r.date,
+          volume: r.volume,
+          wraps: r.wraps,
+          unwraps: r.unwraps,
+        })),
+        topChains: chainRows.map((r) => ({
+          chain: r.chain,
+          volume: r.volume,
+          percentage: totalVolumeNum > 0 ? (Number(r.volume) / totalVolumeNum) * 100 : 0,
+        })),
         days,
       };
       await cache.set(cacheKey, resp, 30);
@@ -42,7 +110,7 @@ export async function analyticsRoutes(app: FastifyInstance) {
     },
   );
 
-  /** Top-performing arrays by a chosen metric. */
+  /** Top-performing arrays — sorted via indexed Postgres ORDER BY. */
   app.get<{ Querystring: { limit?: string; sort?: string } }>(
     '/analytics/top-arrays',
     async (request) => {
@@ -53,26 +121,39 @@ export async function analyticsRoutes(app: FastifyInstance) {
       const cached = await cache.get<TopArraysResponse>(cacheKey);
       if (cached) return cached;
 
-      const client = getClient();
-      const allArrays = await client.registry.getAllArrays().catch(() => []);
+      const db = getDb();
 
-      const entries = allArrays
-        .slice(0, 50)
-        .map((a) => ({
-          id: a.id,
-          name: a.name,
-          status: a.status,
-          ratedCapacityW: a.ratedCapacityW,
-          yieldPerShare: a.yieldPerShare ?? '0',
-          totalShares: a.totalSupply ?? '0',
-          co2OffsetKgPerYear: a.impact?.co2OffsetKgPerYear ?? 0,
-        }))
-        .sort((a, b) => {
-          if (sort === 'capacity') return b.ratedCapacityW - a.ratedCapacityW;
-          if (sort === 'shares') return Number(BigInt(b.totalShares) - BigInt(a.totalShares));
-          return Number(BigInt(b.yieldPerShare) - BigInt(a.yieldPerShare));
+      // Pick the ORDER BY column.
+      const orderCol =
+        sort === 'capacity'
+          ? arrays.ratedCapacityW
+          : sql`(${arrays.impact}->>'expectedYieldKwhPerYear')::bigint`;
+
+      const rows = await db
+        .select({
+          id: arrays.id,
+          name: arrays.name,
+          status: arrays.status,
+          ratedCapacityW: arrays.ratedCapacityW,
+          tokenContract: arrays.tokenContract,
+          impact: arrays.impact,
         })
-        .slice(0, limit);
+        .from(arrays)
+        .orderBy(desc(orderCol))
+        .limit(limit);
+
+      const entries = rows.map((row) => {
+        const imp = row.impact as { co2OffsetKgPerYear?: number; expectedYieldKwhPerYear?: number } | null;
+        return {
+          id: row.id,
+          name: row.name,
+          status: row.status,
+          ratedCapacityW: Number(row.ratedCapacityW),
+          yieldPerShare: '0',
+          totalShares: '0',
+          co2OffsetKgPerYear: imp?.co2OffsetKgPerYear ?? 0,
+        };
+      });
 
       const resp: TopArraysResponse = {
         entries,
@@ -84,7 +165,7 @@ export async function analyticsRoutes(app: FastifyInstance) {
     },
   );
 
-  /** Yield projection for an array. */
+  /** Yield projection for an array — reads from chain via SDK. */
   app.get<{ Querystring: { arrayId: string; shares?: string; months?: string } }>(
     '/analytics/yield-projection',
     async (request, reply) => {
