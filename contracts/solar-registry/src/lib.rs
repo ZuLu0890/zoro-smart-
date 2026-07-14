@@ -445,6 +445,154 @@ impl SolarRegistry {
     }
 
     // --------------------------------------------------------------------
+    // Filtered queries
+    // --------------------------------------------------------------------
+
+    /// Return all array IDs that match a given status.
+    pub fn get_arrays_by_status(
+        env: Env,
+        status: ArrayStatus,
+    ) -> Vec<BytesN<32>> {
+        let index: Vec<BytesN<32>> = env
+            .storage()
+            .instance()
+            .get(&DataKey::Index)
+            .unwrap_or(Vec::new(&env));
+        let mut results = Vec::new(&env);
+        for id in index.iter() {
+            if let Ok(array) = env
+                .storage()
+                .persistent()
+                .get::<DataKey, SolarArray>(&DataKey::Array(id.clone()))
+            {
+                if array.status == status {
+                    results.push_back(id.clone());
+                }
+            }
+        }
+        results
+    }
+
+    /// Find all arrays operated by a given address.
+    pub fn find_arrays_by_operator(env: Env, operator: Address) -> Vec<BytesN<32>> {
+        let index: Vec<BytesN<32>> = env
+            .storage()
+            .instance()
+            .get(&DataKey::Index)
+            .unwrap_or(Vec::new(&env));
+        let mut results = Vec::new(&env);
+        for id in index.iter() {
+            if let Ok(array) = env
+                .storage()
+                .persistent()
+                .get::<DataKey, SolarArray>(&DataKey::Array(id.clone()))
+            {
+                if array.operator == operator {
+                    results.push_back(id.clone());
+                }
+            }
+        }
+        results
+    }
+
+    /// Aggregate rated capacity across all active arrays (watts).
+    pub fn total_rated_capacity(env: Env) -> u64 {
+        let index: Vec<BytesN<32>> = env
+            .storage()
+            .instance()
+            .get(&DataKey::Index)
+            .unwrap_or(Vec::new(&env));
+        let mut total: u64 = 0;
+        for id in index.iter() {
+            if let Ok(array) = env
+                .storage()
+                .persistent()
+                .get::<DataKey, SolarArray>(&DataKey::Array(id.clone()))
+            {
+                if array.status == ArrayStatus::Active {
+                    total = total.saturating_add(array.rated_capacity_w);
+                }
+            }
+        }
+        total
+    }
+
+    /// Return a count of arrays grouped by status.
+    pub fn array_count_by_status(env: Env) -> soroban_sdk::Map<u32, u32> {
+        let index: Vec<BytesN<32>> = env
+            .storage()
+            .instance()
+            .get(&DataKey::Index)
+            .unwrap_or(Vec::new(&env));
+        let mut counts: soroban_sdk::Map<u32, u32> = soroban_sdk::Map::new(&env);
+        for id in index.iter() {
+            if let Ok(array) = env
+                .storage()
+                .persistent()
+                .get::<DataKey, SolarArray>(&DataKey::Array(id.clone()))
+            {
+                let status_code = array.status as u32;
+                let current = counts.get(status_code).unwrap_or(0);
+                counts.set(status_code, current + 1);
+            }
+        }
+        counts
+    }
+
+    // --------------------------------------------------------------------
+    // Maintenance log
+    // --------------------------------------------------------------------
+
+    /// Record a maintenance event for an array. Verifier or operator may call.
+    pub fn record_maintenance(
+        env: Env,
+        array_id: BytesN<32>,
+        description: String,
+    ) -> Result<(), RegistryError> {
+        let verifier: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Verifier)
+            .ok_or(RegistryError::NotInitialized)?;
+        let array: SolarArray = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Array(array_id.clone()))
+            .ok_or(RegistryError::ArrayNotFound)?;
+        // Allow verifier OR the array's own operator.
+        if !Self::is_authorised(&env, &verifier) && !Self::is_authorised(&env, &array.operator) {
+            return Err(RegistryError::Unauthorized);
+        }
+        verifier.require_auth();
+        let event = MaintenanceEvent {
+            timestamp: env.ledger().timestamp(),
+            description,
+            performed_by: verifier,
+        };
+        let mut log: Vec<MaintenanceEvent> = env
+            .storage()
+            .persistent()
+            .get(&DataKey::MaintenanceLog(array_id.clone()))
+            .unwrap_or(Vec::new(&env));
+        log.push_back(event);
+        env.storage()
+            .persistent()
+            .set(&DataKey::MaintenanceLog(array_id), &log);
+        Ok(())
+    }
+
+    /// Return the maintenance event log for an array.
+    pub fn get_maintenance_log(
+        env: Env,
+        array_id: BytesN<32>,
+    ) -> Result<Vec<MaintenanceEvent>, RegistryError> {
+        env.storage()
+            .persistent()
+            .get(&DataKey::MaintenanceLog(array_id))
+            .ok_or(RegistryError::MaintenanceEventNotFound)
+    }
+
+    // --------------------------------------------------------------------
     // Internal helpers
     // --------------------------------------------------------------------
 
