@@ -20,7 +20,6 @@ export class RwaTokenContract {
     });
   }
 
-  /** Swap the source account for every read on this contract. */
   setSimulationAccount(account: SimulationAccount): void {
     this.client.setSimulationAccount(account);
   }
@@ -46,6 +45,22 @@ export class RwaTokenContract {
     return { name, symbol, decimals: Number(decimals) };
   }
 
+  // --- Compliance & admin reads ---
+
+  async isFrozen(account: string): Promise<boolean> {
+    return this.client.read<boolean>('is_frozen', { account });
+  }
+
+  async isPaused(): Promise<boolean> {
+    return this.client.read<boolean>('paused');
+  }
+
+  async supplyCap(): Promise<string> {
+    return this.client.read<string>('supply_cap');
+  }
+
+  // --- Builders ---
+
   buildTransfer(from: string, to: string, amount: string) {
     return this.client.buildWrite('transfer', { from, to, amount });
   }
@@ -70,6 +85,50 @@ export class RwaTokenContract {
 
   buildBurn(from: string, amount: string) {
     return this.client.buildWrite('burn', { from, amount });
+  }
+
+  buildFreeze(account: string) {
+    return this.client.buildWrite('freeze_account', { account });
+  }
+
+  buildUnfreeze(account: string) {
+    return this.client.buildWrite('unfreeze_account', { account });
+  }
+
+  buildClawback(from: string, amount: string) {
+    return this.client.buildWrite('clawback', { from, amount });
+  }
+
+  buildPause() {
+    return this.client.buildWrite('pause', {});
+  }
+
+  buildUnpause() {
+    return this.client.buildWrite('unpause', {});
+  }
+
+  buildSetSupplyCap(cap: string) {
+    return this.client.buildWrite('set_supply_cap', { cap });
+  }
+
+  buildSetAdmin(newAdmin: string) {
+    return this.client.buildWrite('set_admin', { new_admin: newAdmin });
+  }
+
+  buildSetOperator(newOperator: string) {
+    return this.client.buildWrite('set_operator', { new_operator: newOperator });
+  }
+
+  buildBurnFrom(from: string, amount: string) {
+    return this.client.buildWrite('burn_from', { from, amount });
+  }
+
+  buildTransferBatch(from: string, recipients: string[], amounts: string[]) {
+    return this.client.buildWrite('transfer_batch', { from, recipients, amounts });
+  }
+
+  buildTransferFrom(spender: string, owner: string, to: string, amount: string) {
+    return this.client.buildWrite('transfer_from', { spender, owner, to, amount });
   }
 }
 

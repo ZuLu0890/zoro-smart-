@@ -20,7 +20,6 @@ export class YieldDistributorContract {
     });
   }
 
-  /** Swap the source account for every read on this contract. */
   setSimulationAccount(account: SimulationAccount): void {
     this.client.setSimulationAccount(account);
   }
@@ -38,22 +37,37 @@ export class YieldDistributorContract {
     return Number(out);
   }
 
-  /**
-   * Returns the address authorised to call `fund()` on this distributor.
-   * Useful for the dashboard to show who is depositing revenue batches
-   * and for the indexer to validate incoming relay transactions.
-   */
   async funder(): Promise<string> {
     return this.client.read<string>('funder');
   }
 
-  /**
-   * Returns the cumulative amount of yield claimed by all holders since
-   * the contract was deployed. Exposed by the contract as `TotalClaimed`
-   * in instance storage and updated on every successful `claim()`.
-   */
   async totalClaimed(): Promise<string> {
     return this.client.read<string>('total_claimed');
+  }
+
+  async totalFunded(): Promise<string> {
+    return this.client.read<string>('total_funded');
+  }
+
+  async fundingCount(): Promise<number> {
+    const out = await this.client.read<number>('funding_count');
+    return Number(out);
+  }
+
+  async isPaused(): Promise<boolean> {
+    return this.client.read<boolean>('paused');
+  }
+
+  async minClaim(): Promise<string> {
+    return this.client.read<string>('min_claim');
+  }
+
+  async shareToken(): Promise<string> {
+    return this.client.read<string>('share_token');
+  }
+
+  async paymentToken(): Promise<string> {
+    return this.client.read<string>('payment_token');
   }
 
   buildFund(from: string, amount: string) {
@@ -62,5 +76,33 @@ export class YieldDistributorContract {
 
   buildClaim(holder: string) {
     return this.client.buildWrite('claim', { holder });
+  }
+
+  buildPause() {
+    return this.client.buildWrite('pause', {});
+  }
+
+  buildUnpause() {
+    return this.client.buildWrite('unpause', {});
+  }
+
+  buildSetAdmin(newAdmin: string) {
+    return this.client.buildWrite('set_admin', { new_admin: newAdmin });
+  }
+
+  buildSetFunder(newFunder: string) {
+    return this.client.buildWrite('set_funder', { new_funder: newFunder });
+  }
+
+  buildSetShareToken(newToken: string) {
+    return this.client.buildWrite('set_share_token', { new_token: newToken });
+  }
+
+  buildSetMinClaim(minAmount: string) {
+    return this.client.buildWrite('set_min_claim', { min_amount: minAmount });
+  }
+
+  buildWithdrawSurplus(to: string, amount: string) {
+    return this.client.buildWrite('withdraw_surplus', { to, amount });
   }
 }

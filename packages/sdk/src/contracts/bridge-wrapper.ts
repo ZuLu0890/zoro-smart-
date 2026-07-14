@@ -35,7 +35,6 @@ export class BridgeWrapperContract {
     });
   }
 
-  /** Swap the source account for every read on this contract. */
   setSimulationAccount(account: SimulationAccount): void {
     this.client.setSimulationAccount(account);
   }
@@ -47,6 +46,32 @@ export class BridgeWrapperContract {
   async getThreshold(chainId: number): Promise<number> {
     const out = await this.client.read<number>('get_threshold', { chain_id: chainId });
     return Number(out);
+  }
+
+  async chainInfo(chainId: number): Promise<{ validators: string[]; threshold: number; active: boolean }> {
+    return this.client.read<{ validators: string[]; threshold: number; active: boolean }>(
+      'chain_info',
+      { chain_id: chainId },
+    );
+  }
+
+  async getWrappedToken(chainId: number, sourceToken: string): Promise<string> {
+    return this.client.read<string>('get_wrapped_token', {
+      chain_id: chainId,
+      source_token: sourceToken,
+    });
+  }
+
+  async totalMinted(wrappedToken: string): Promise<string> {
+    return this.client.read<string>('total_minted', { wrapped_token: wrappedToken });
+  }
+
+  async totalBurned(wrappedToken: string): Promise<string> {
+    return this.client.read<string>('total_burned', { wrapped_token: wrappedToken });
+  }
+
+  async isPaused(): Promise<boolean> {
+    return this.client.read<boolean>('paused');
   }
 
   buildWrap(deposit: DepositMessageInput, signatures: SolverSignatureInput[]) {
@@ -73,6 +98,48 @@ export class BridgeWrapperContract {
         amount: request.amount,
         nonce: request.nonce,
       },
+    });
+  }
+
+  buildSetAdmin(newAdmin: string) {
+    return this.client.buildWrite('set_admin', { new_admin: newAdmin });
+  }
+
+  buildPause() {
+    return this.client.buildWrite('pause', {});
+  }
+
+  buildUnpause() {
+    return this.client.buildWrite('unpause', {});
+  }
+
+  buildSetChainActive(chainId: number, active: boolean) {
+    return this.client.buildWrite('set_chain_active', { chain_id: chainId, active });
+  }
+
+  buildRemoveValidator(chainId: number, validator: string) {
+    return this.client.buildWrite('remove_validator', { chain_id: chainId, validator });
+  }
+
+  buildUpdateThreshold(chainId: number, newThreshold: number) {
+    return this.client.buildWrite('update_threshold', {
+      chain_id: chainId,
+      new_threshold: newThreshold,
+    });
+  }
+
+  buildUnbindToken(chainId: number, sourceToken: string) {
+    return this.client.buildWrite('unbind_token', {
+      chain_id: chainId,
+      source_token: sourceToken,
+    });
+  }
+
+  buildBindToken(chainId: number, sourceToken: string, wrappedToken: string) {
+    return this.client.buildWrite('bind_token', {
+      chain_id: chainId,
+      source_token: sourceToken,
+      wrapped_token: wrappedToken,
     });
   }
 }
