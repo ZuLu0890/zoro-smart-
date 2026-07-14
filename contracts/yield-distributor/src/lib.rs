@@ -39,6 +39,31 @@ pub enum YieldError {
     ZeroAmount = 8,
 }
 
+impl From<YieldError> for soroban_sdk::Error {
+    fn from(e: YieldError) -> Self {
+        // TODO: surface a typed error code in the host error once the
+        // soroban-sdk macro exposes the variant discriminant directly.
+        soroban_sdk::Error::from_contract_error(e as u32)
+    }
+}
+
+impl From<soroban_sdk::Error> for YieldError {
+    fn from(_e: soroban_sdk::Error) -> Self {
+        // TODO: map specific host error codes back to YieldError variants
+        // once the soroban-sdk macro exposes the contract error code.
+        YieldError::Unauthorized
+    }
+}
+
+impl From<&YieldError> for soroban_sdk::Error {
+    fn from(e: &YieldError) -> Self {
+        // The `#[contractimpl]` macro in soroban-sdk v22 calls
+        // `Into<soroban_sdk::Error>` on error references, not values,
+        // when constructing the host error from a borrowed `Result`.
+        soroban_sdk::Error::from_contract_error(*e as u32)
+    }
+}
+
 // ============================================================================
 // Storage
 // ============================================================================

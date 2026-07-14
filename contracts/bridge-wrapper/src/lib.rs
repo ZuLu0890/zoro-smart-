@@ -5,6 +5,7 @@
 //!
 //! Trust model
 //! ===========
+//!
 //! 1. Source-chain watcher(s) watch lock/transactions. For each lock, they
 //!    produce a signed message of the form:
 //!    `(chain_id, source_tx_hash, sender, recipient, amount, nonce, dest_token)`
@@ -46,6 +47,31 @@ pub enum BridgeError {
     MathOverflow = 8,
     /// Validator set is below the configured threshold for the chain.
     QuorumNotMet = 9,
+}
+
+impl From<BridgeError> for soroban_sdk::Error {
+    fn from(e: BridgeError) -> Self {
+        // TODO: surface a typed error code in the host error once the
+        // soroban-sdk macro exposes the variant discriminant directly.
+        soroban_sdk::Error::from_contract_error(e as u32)
+    }
+}
+
+impl From<soroban_sdk::Error> for BridgeError {
+    fn from(_e: soroban_sdk::Error) -> Self {
+        // TODO: map specific host error codes back to BridgeError variants
+        // once the soroban-sdk macro exposes the contract error code.
+        BridgeError::Unauthorized
+    }
+}
+
+impl From<&BridgeError> for soroban_sdk::Error {
+    fn from(e: &BridgeError) -> Self {
+        // The `#[contractimpl]` macro in soroban-sdk v22 calls
+        // `Into<soroban_sdk::Error>` on error references, not values,
+        // when constructing the host error from a borrowed `Result`.
+        soroban_sdk::Error::from_contract_error(*e as u32)
+    }
 }
 
 // ============================================================================

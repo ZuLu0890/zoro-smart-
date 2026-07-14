@@ -35,6 +35,33 @@ pub enum TokenError {
     ZeroAmount = 7,
 }
 
+impl From<TokenError> for soroban_sdk::Error {
+    fn from(e: TokenError) -> Self {
+        // TODO: surface a typed error code in the host error once the
+        // soroban-sdk macro exposes the variant discriminant directly.
+        soroban_sdk::Error::from_contract_error(e as u32)
+    }
+}
+
+impl From<soroban_sdk::Error> for TokenError {
+    fn from(_e: soroban_sdk::Error) -> Self {
+        // TODO: map specific host error codes back to TokenError variants
+        // once the soroban-sdk macro exposes the contract error code.
+        TokenError::Unauthorized
+    }
+}
+
+impl From<&TokenError> for soroban_sdk::Error {
+    fn from(e: &TokenError) -> Self {
+        // The `#[contractimpl]` macro in soroban-sdk v22 calls
+        // `Into<soroban_sdk::Error>` on error references, not values,
+        // when constructing the host error from a borrowed `Result`.
+        // Without this impl the contract fails to compile with an
+        // E0277 trait-bound error.
+        soroban_sdk::Error::from_contract_error(*e as u32)
+    }
+}
+
 // ============================================================================
 // Storage keys
 // ============================================================================
