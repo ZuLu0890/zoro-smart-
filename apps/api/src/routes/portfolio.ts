@@ -38,7 +38,7 @@ export async function portfolioRoutes(app: FastifyInstance) {
             .filter((a) => a.tokenContract)
             .slice(0, 20)
             .map(async (arr) => {
-              const balance = await client.rwaToken.balance(arr.tokenContract!, holder).catch(() => '0');
+              const balance = await client.rwaToken.readBalance(holder).catch(() => '0');
               const claimable = await client.yieldDistributor.claimable(holder).catch(() => '0');
               const yps = await client.yieldDistributor.yieldPerShare().catch(() => '0');
               return {

@@ -9,7 +9,7 @@ import type {
   PortfolioSummary,
   Notification,
   NotificationCount,
-  Paginated as PaginatedType,
+  SearchResult,
 } from '@solshare/shared';
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api';
@@ -85,18 +85,17 @@ export const api = {
     if (params.unreadOnly) qs.set('unreadOnly', 'true');
     if (params.page) qs.set('page', String(params.page));
     if (params.pageSize) qs.set('pageSize', String(params.pageSize));
-    return request<PaginatedType<Notification>>(`/notifications?${qs.toString()}`);
+    return request<Paginated<Notification>>(`/notifications?${qs.toString()}`);
   },
   search: (q: string) =>
-    request<{ query: string; results: { id: string; type: string; title: string; subtitle: string; url: string }[]; total: number; tookMs: number }>(`/search?q=${encodeURIComponent(q)}`),
-  /** Analytics */
+    request<{ query: string; results: SearchResult[]; total: number; tookMs: number }>(`/search?q=${encodeURIComponent(q)}`),
   analyticsVolume: (days = 30) =>
     request<{ totalBridgeVolumeUsdc: string; totalWraps: number; totalUnwraps: number; daily: unknown[]; topChains: unknown[]; days: number }>(`/analytics/volume?days=${days}`),
   analyticsTopArrays: (params: { limit?: number; sort?: string } = {}) =>
     request<{ entries: { id: string; name: string; status: string; ratedCapacityW: number; yieldPerShare: string; totalShares: string; co2OffsetKgPerYear: number }[]; sortBy: string; limit: number }>(
       `/analytics/top-arrays?limit=${params.limit ?? 5}&sort=${params.sort ?? 'yield'}`,
     ),
-  /** Notifications */
+  notificationCount: (address: string) =>
     request<NotificationCount>(`/notifications/count?address=${encodeURIComponent(address)}`),
   markNotificationsRead: (body: { address: string; ids: string[]; markAll: boolean }) =>
     request<{ status: string }>('/notifications/read', {
