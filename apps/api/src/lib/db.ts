@@ -12,9 +12,12 @@ import {
   pgTable,
   bigserial,
   text,
+  integer,
+  bigint,
   boolean,
   timestamp,
   index,
+  jsonb,
 } from 'drizzle-orm/pg-core';
 import { logger } from './logger.js';
 
@@ -49,11 +52,67 @@ export const notifications = pgTable(
 export type DbNotification = typeof notifications.$inferSelect;
 export type DbNotificationInsert = typeof notifications.$inferInsert;
 
+/* ---- arrays (mirrors indexer schema) ---- */
+
+export const arrays = pgTable(
+  'arrays',
+  {
+    id: text('id').primaryKey(),
+    name: text('name').notNull(),
+    operator: text('operator').notNull(),
+    location: jsonb('location').notNull(),
+    panelCount: integer('panel_count').notNull(),
+    panelTech: text('panel_tech').notNull(),
+    ratedCapacityW: bigint('rated_capacity_w', { mode: 'bigint' }).notNull(),
+    installedAt: timestamp('installed_at', { withTimezone: true }).notNull(),
+    status: text('status').notNull(),
+    impact: jsonb('impact').notNull(),
+    tokenContract: text('token_contract'),
+    metadataUri: text('metadata_uri'),
+    lastUpdated: timestamp('last_updated', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({
+    byStatus: index('arrays_status_idx').on(t.status),
+  }),
+);
+
+/* ---- bridge_txs (mirrors indexer schema) ---- */
+
+export const bridgeTxs = pgTable(
+  'bridge_txs',
+  {
+    id: text('id').primaryKey(),
+    direction: text('direction').notNull(),
+    sourceChain: text('source_chain').notNull(),
+    sourceTxHash: text('source_tx_hash').notNull(),
+    sorobanTxHash: text('soroban_tx_hash'),
+    wrappedToken: text('wrapped_token').notNull(),
+    amount: text('amount').notNull(),
+    sender: text('sender').notNull(),
+    recipient: text('recipient').notNull(),
+    status: text('status').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+    blockNumber: bigint('block_number', { mode: 'bigint' }),
+    blockConfirmations: integer('block_confirmations'),
+    signaturesReceived: integer('signatures_received'),
+    signaturesRequired: integer('signatures_required'),
+    failureReason: text('failure_reason'),
+    ledger: integer('ledger'),
+    feeCharged: text('fee_charged'),
+    memo: text('memo'),
+  },
+  (t) => ({
+    byStatus: index('bridge_status_idx').on(t.status),
+    byChain: index('bridge_chain_idx').on(t.sourceChain),
+  }),
+);
+
 /* ------------------------------------------------------------------ */
 /*  Connection singleton                                                */
 /* ------------------------------------------------------------------ */
 
-const schema = { notifications };
+const schema = { notifications, arrays, bridgeTxs };
 type Schema = typeof schema;
 let _db: PostgresJsDatabase<Schema> | null = null;
 
