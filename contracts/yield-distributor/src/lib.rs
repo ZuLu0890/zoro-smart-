@@ -296,44 +296,6 @@ impl YieldDistributor {
     /// Pull-based claim: holder pulls their own yield.
     pub fn claim(env: Env, holder: Address) -> Result<i128, YieldError> {
         holder.require_auth();
-        let share_token = Self::share_token(env.clone())?;
-        let token_client = token::TokenClient::new(&env, &share_token);
-        let balance = token_client.balance(&holder);
-        let claimable = Self::claimable_with_balance(env.clone(), holder.clone(), balance)?;
-        if claimable <= 0 {
-            return Err(YieldError::NothingToClaim);
-        }
-        let yps: i128 = env
-            .storage()
-            .instance()
-            .get(&DataKey::YieldPerShare)
-            .unwrap_or(0);
-        env.storage()
-            .persistent()
-            .set(&DataKey::PaidYieldPerShare(holder.clone()), &yps);
-        // Keep the per-holder ledger alive long enough to survive between
-        // revenue epochs (~90 days / 7_776_000 ledgers on Public Network).
-        env.storage().persistent().extend_ttl(
-            &DataKey::PaidYieldPerShare(holder.clone()),
-            172_800u32,
-            7_776_000u32,
-        );
-
-        let payment_token = Self::payment_token(env.clone())?;
-        let pay_client = token::TokenClient::new(&env, &payment_token);
-        pay_client.transfer(&env.current_contract_address(), &holder, &claimable);
-
-        let total: i128 = env
-            .storage()
-            .instance()
-            .get(&DataKey::TotalClaimed)
-            .unwrap_or(0i128);
-        env.storage().instance().set(
-            &DataKey::TotalClaimed,
-            &total
-                .checked_add(claimable)
-                .ok_or(YieldError::MathOverflow)?,
-        );
 
         // Check if claims are paused.
         let paused: bool = env
@@ -344,6 +306,15 @@ impl YieldDistributor {
         if paused {
             return Err(YieldError::ClaimsPaused);
         }
+
+        let share_token = Self::share_token(env.clone())?;
+        let token_client = token::TokenClient::new(&env, &share_token);
+        let balance = token_client.balance(&holder);
+        let claimable = Self::claimable_with_balance(env.clone(), holder.clone(), balance)?;
+        if claimable <= 0 {
+            return Err(YieldError::NothingToClaim);
+        }
+
         // Enforce minimum claim threshold.
         let min_claim: i128 = env
             .storage()
@@ -362,6 +333,8 @@ impl YieldDistributor {
         env.storage()
             .persistent()
             .set(&DataKey::PaidYieldPerShare(holder.clone()), &yps);
+        // Keep the per-holder ledger alive long enough to survive between
+        // revenue epochs (~90 days / 7_776_000 ledgers on Public Network).
         env.storage().persistent().extend_ttl(
             &DataKey::PaidYieldPerShare(holder.clone()),
             172_800u32,
