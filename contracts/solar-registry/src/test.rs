@@ -100,20 +100,16 @@ fn test_status_lifecycle_transitions() {
     let array = make_array(&env, id.clone(), operator);
     client.register_array(&array);
 
-    // Pending -> Active is allowed
     client.set_status(&id, &ArrayStatus::Active);
     let read = client.get_array(&id);
     assert_eq!(read.status, ArrayStatus::Active);
 
-    // Active -> Maintenance is allowed
     client.set_status(&id, &ArrayStatus::Maintenance);
     let read = client.get_array(&id);
     assert_eq!(read.status, ArrayStatus::Maintenance);
 
-    // Maintenance -> Active
     client.set_status(&id, &ArrayStatus::Active);
 
-    // Active -> Decommissioned (admin-only)
     client.set_status(&id, &ArrayStatus::Decommissioned);
     let read = client.get_array(&id);
     assert_eq!(read.status, ArrayStatus::Decommissioned);
@@ -154,4 +150,164 @@ fn test_bind_token_updates_array() {
 
     let read = client.get_array(&id);
     assert_eq!(read.token_contract, Some(token_contract));
+}
+
+// ---------------------------------------------------------------------------
+// New tests: metadata updates, filtered queries, maintenance log
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_update_array_metadata() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(SolarRegistry, ());
+    let admin = Address::generate(&env);
+    let verifier = Address::generate(&env);
+    let operator = Address::generate(&env);
+    let client = SolarRegistryClient::new(&env, &contract_id);
+    client.initialize(&admin, &verifier);
+
+    let id = BytesN::from_array(&env, &[5u8; 32]);
+    let array = make_array(&env, id.clone(), operator);
+    client.register_array(&array);
+
+    let new_name = String::from_str(&env, "Updated Array Name");
+    let new_uri = String::from_str(&env, "ipfs://updated-hash");
+    client.update_array_metadata(&id, &new_name, &new_uri);
+
+    let read = client.get_array(&id);
+    assert_eq!(read.name, new_name);
+    assert_eq!(read.metadata_uri, new_uri);
+}
+
+#[test]
+fn test_unbind_token() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(SolarRegistry, ());
+    let admin = Address::generate(&env);
+    let verifier = Address::generate(&env);
+    let operator = Address::generate(&env);
+    let client = SolarRegistryClient::new(&env, &contract_id);
+    client.initialize(&admin, &verifier);
+
+    let id = BytesN::from_array(&env, &[6u8; 32]);
+    let array = make_array(&env, id.clone(), operator);
+    client.register_array(&array);
+
+    let token = Address::generate(&env);
+    client.bind_token(&id, &token);
+    assert_eq!(client.get_array(&id).token_contract, Some(token.clone()));
+
+    client.unbind_token(&id);
+    assert_eq!(client.get_array(&id).token_contract, None);
+}
+
+#[test]
+fn test_set_admin_and_verifier() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(SolarRegistry, ());
+    let admin = Address::generate(&env);
+    let verifier = Address::generate(&env);
+    let new_admin = Address::generate(&env);
+    let new_verifier = Address::generate(&env);
+    let client = SolarRegistryClient::new(&env, &contract_id);
+    client.initialize(&admin, &verifier);
+
+    client.set_admin(&new_admin);
+    assert_eq!(client.admin(), new_admin);
+
+    client.set_verifier(&new_verifier);
+    assert_eq!(client.verifier(), new_verifier);
+}
+
+#[test]
+fn test_get_arrays_by_status() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(SolarRegistry, ());
+    let admin = Address::generate(&env);
+    let verifier = Address::generate(&env);
+    let operator = Address::generate(&env);
+    let client = SolarRegistryClient::new(&env, &contract_id);
+    client.initialize(&admin, &verifier);
+
+    let id1 = BytesN::from_array(&env, &[10u8; 32]);
+    client.register_array(&make_array(&env, id1.clone(), operator.clone()));
+    client.set_status(&id1, &ArrayStatus::Active);
+
+    let id2 = BytesN::from_array(&env, &[11u8; 32]);
+    client.register_array(&make_array(&env, id2.clone(), operator.clone()));
+
+    let active = client.get_arrays_by_status(&ArrayStatus::Active);
+    assert_eq!(active.len(), 1);
+    assert_eq!(active.get(0).unwrap(), id1);
+
+    let pending = client.get_arrays_by_status(&ArrayStatus::Pending);
+    assert_eq!(pending.len(), 1);
+}
+
+#[test]
+fn test_find_arrays_by_operator() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(SolarRegistry, ());
+    let admin = Address::generate(&env);
+    let verifier = Address::generate(&env);
+    let operator_a = Address::generate(&env);
+    let operator_b = Address::generate(&env);
+    let client = SolarRegistryClient::new(&env, &contract_id);
+    client.initialize(&admin, &verifier);
+
+    let id1 = BytesN::from_array(&env, &[12u8; 32]);
+    client.register_array(&make_array(&env, id1.clone(), operator_a.clone()));
+    let id2 = BytesN::from_array(&env, &[13u8; 32]);
+    client.register_array(&make_array(&env, id2.clone(), operator_a.clone()));
+    let id3 = BytesN::from_array(&env, &[14u8; 32]);
+    client.register_array(&make_array(&env, id3.clone(), operator_b.clone()));
+
+    let found = client.find_arrays_by_operator(&operator_a);
+    assert_eq!(found.len(), 2);
+}
+
+#[test]
+fn test_total_rated_capacity() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(SolarRegistry, ());
+    let admin = Address::generate(&env);
+    let verifier = Address::generate(&env);
+    let operator = Address::generate(&env);
+    let client = SolarRegistryClient::new(&env, &contract_id);
+    client.initialize(&admin, &verifier);
+
+    let id1 = BytesN::from_array(&env, &[15u8; 32]);
+    client.register_array(&make_array(&env, id1.clone(), operator.clone()));
+    client.set_status(&id1, &ArrayStatus::Active);
+
+    // Only active arrays count toward total.
+    assert_eq!(client.total_rated_capacity(), 96_000);
+}
+
+#[test]
+fn test_record_and_get_maintenance_log() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(SolarRegistry, ());
+    let admin = Address::generate(&env);
+    let verifier = Address::generate(&env);
+    let operator = Address::generate(&env);
+    let client = SolarRegistryClient::new(&env, &contract_id);
+    client.initialize(&admin, &verifier);
+
+    let id = BytesN::from_array(&env, &[16u8; 32]);
+    client.register_array(&make_array(&env, id.clone(), operator));
+
+    let desc = String::from_str(&env, "Replaced 3 faulty inverters");
+    client.record_maintenance(&id, &desc);
+
+    let log = client.get_maintenance_log(&id);
+    assert_eq!(log.len(), 1);
+    assert_eq!(log.get(0).unwrap().description, desc);
 }
