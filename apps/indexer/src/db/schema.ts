@@ -4,6 +4,7 @@ import {
   text,
   integer,
   bigint,
+  boolean,
   timestamp,
   index,
   jsonb,
@@ -118,3 +119,37 @@ export type DbEvent = typeof events.$inferSelect;
 export type DbArray = typeof arrays.$inferSelect;
 export type DbBridgeTx = typeof bridgeTxs.$inferSelect;
 export type DbYieldClaim = typeof yieldClaims.$inferSelect;
+
+/** User-facing notifications generated from contract events. */
+export const notifications = pgTable(
+  'notifications',
+  {
+    id: bigserial('id', { mode: 'bigint' }).primaryKey(),
+    /** Stellar address (G...) of the recipient. */
+    recipient: text('recipient').notNull(),
+    title: text('title').notNull(),
+    body: text('body').notNull(),
+    category: text('category').notNull(),
+    severity: text('severity').notNull().default('info'),
+    read: boolean('read').notNull().default(false),
+    /** Relative URL path for the notification action, e.g. "/arrays/abc123". */
+    actionUrl: text('action_url'),
+    /** Short CTA label, e.g. "View proposal". */
+    actionLabel: text('action_label'),
+    /** Optional array context. */
+    arrayId: text('array_id'),
+    /** Optional transaction hash context. */
+    txHash: text('tx_hash'),
+    /** Source paging token from the Soroban event that triggered this. */
+    sourcePagingToken: text('source_paging_token'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    readAt: timestamp('read_at', { withTimezone: true }),
+  },
+  (t) => ({
+    byRecipient: index('notif_recipient_idx').on(t.recipient, t.read),
+    byCategory: index('notif_category_idx').on(t.category),
+    uniqSource: uniqueIndex('notif_source_uq').on(t.sourcePagingToken),
+  }),
+);
+
+export type DbNotification = typeof notifications.$inferSelect;
