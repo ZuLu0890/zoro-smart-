@@ -1,6 +1,8 @@
-use super::*;
-use soroban_sdk::testutils::Address as _;
-use soroban_sdk::{Address, Env, IntoVal, String};
+#![cfg(test)]
+extern crate std;
+
+use crate::{RwaToken, RwaTokenClient};
+use soroban_sdk::{testutils::Address as _, Address, Env, IntoVal, String};
 
 #[test]
 fn test_initialize_then_metadata() {
@@ -113,7 +115,6 @@ fn test_unauthorized_mint_rejected() {
             contract: &contract_id,
             fn_name: "mint",
             args: soroban_sdk::vec![&env, alice.into_val(&env), 1_000i128.into_val(&env)],
-            // soroban-sdk v22 requires explicit `sub_invokes` (default: empty).
             sub_invokes: &[],
         },
     }]);
@@ -173,4 +174,15 @@ fn test_set_operator_admin_only() {
     );
     client.set_operator(&new_operator);
     assert_eq!(client.operator(), new_operator);
+}
+
+#[test]
+fn test_version_returns_cargo_pkg_version() {
+    // `version()` returns the crate semver as a Symbol with dots replaced by
+    // underscores (Soroban Symbols only allow `[a-zA-Z0-9_]`).
+    let env = Env::default();
+    let version = RwaToken::version();
+    // "0.1.0" → "0_1_0"
+    let expected = soroban_sdk::Symbol::new(&env, "0_1_0");
+    assert_eq!(version, expected);
 }

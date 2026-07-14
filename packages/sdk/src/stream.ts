@@ -77,7 +77,7 @@ export class LiveStream extends EventTarget {
   async start() {
     try {
       await this.startImpl();
-    } catch (e) {
+    } catch {
       if (!this.closed) this.dispatchEvent(new Event('error'));
     }
   }

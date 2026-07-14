@@ -1,25 +1,17 @@
-use super::*;
-// Bring `RwaToken` (the deployable contract struct) and the
-// `rwa_token::RwaTokenClient` cross-crate binding into scope. The
-// neighbouring `use super::*;` only pulls from this crate's
-// `lib.rs` (which doesn't reference RwaToken directly); the rwa-token
-// dep supplies the contract struct we register with `env.register`.
-use rwa_token::RwaToken;
-use soroban_sdk::testutils::Address as _;
-use soroban_sdk::{Address, Env, String};
+#![cfg(test)]
+
+use crate::{YieldDistributor, YieldDistributorClient};
+use soroban_sdk::{testutils::Address as _, Address, Env, String};
 
 /// Register a fresh rwa-token contract, initialize it, and (optionally)
 /// mint to `holder`. Returns the deployed token's address so it can be
 /// wired into the yield-distributor as the `share_token`.
 fn deploy_rwa_token_with_supply(env: &Env, holder: &Address, supply: i128) -> Address {
-    let rwa_id = env.register(RwaToken, ());
-    // soroban-sdk v22: env.register returns Address directly (no .address()
-    // extraction step). rwa_id is itself the deployed contract address.
-    let rwa_addr = rwa_id;
-    let client = rwa_token::RwaTokenClient::new(env, &rwa_addr);
+    let rwa_id = env.register(rwa_token::RwaToken, ());
     let admin = Address::generate(env);
     let operator = Address::generate(env);
     env.mock_all_auths();
+    let client = rwa_token::RwaTokenClient::new(env, &rwa_id);
     client.initialize(
         &admin,
         &operator,
@@ -30,7 +22,7 @@ fn deploy_rwa_token_with_supply(env: &Env, holder: &Address, supply: i128) -> Ad
     if supply > 0 {
         client.mint(holder, &supply);
     }
-    rwa_addr
+    rwa_id
 }
 
 #[test]
@@ -132,4 +124,69 @@ fn test_set_funder_admin_only() {
     // panic) because the share token has no supply in this harness.
     let res = client.try_fund(&1i128);
     assert!(res.is_err());
+}
+
+#[test]
+fn test_fund_rejects_zero_amount() {
+    // fund() must return ZeroAmount (not MathOverflow) when called with
+    // amount <= 0. This guards against accidental misuse of the error code
+    // that was previously MathOverflow, which is semantically wrong.
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(YieldDistributor, ());
+    let admin = Address::generate(&env);
+    let funder = Address::generate(&env);
+    let share_token = Address::generate(&env);
+    let payment_token = Address::generate(&env);
+
+    let client = YieldDistributorClient::new(&env, &contract_id);
+    client.initialize(&admin, &funder, &share_token, &payment_token);
+
+    // Zero amount.
+    let res = client.try_fund(&0i128);
+    assert!(
+        res.is_err(),
+        "fund(0) must fail with ZeroAmount, not succeed"
+    );
+
+    // Negative amount.
+    let res_neg = client.try_fund(&-1i128);
+    assert!(
+        res_neg.is_err(),
+        "fund(-1) must fail with ZeroAmount, not succeed"
+    );
+}
+
+#[test]
+fn test_funder_getter_returns_stored_funder() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(YieldDistributor, ());
+    let admin = Address::generate(&env);
+    let funder = Address::generate(&env);
+    let share_token = Address::generate(&env);
+    let payment_token = Address::generate(&env);
+
+    let client = YieldDistributorClient::new(&env, &contract_id);
+    client.initialize(&admin, &funder, &share_token, &payment_token);
+
+    // funder() must return exactly the address passed to initialize().
+    assert_eq!(client.funder(), funder);
+}
+
+#[test]
+fn test_total_claimed_starts_at_zero() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let contract_id = env.register(YieldDistributor, ());
+    let admin = Address::generate(&env);
+    let funder = Address::generate(&env);
+    let share_token = Address::generate(&env);
+    let payment_token = Address::generate(&env);
+
+    let client = YieldDistributorClient::new(&env, &contract_id);
+    client.initialize(&admin, &funder, &share_token, &payment_token);
+
+    // Before any claim(), total_claimed() must be 0.
+    assert_eq!(client.total_claimed(), 0i128);
 }

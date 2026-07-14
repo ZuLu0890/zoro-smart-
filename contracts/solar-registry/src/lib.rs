@@ -9,15 +9,16 @@
 //!   `Decommissioned` — physical removal; admin-signed only.
 
 use soroban_sdk::{
-    contract, contractimpl, contracttype, symbol_short, Address, BytesN, Env, String, Vec,
+    contract, contracterror, contractimpl, contracttype, symbol_short, Address, BytesN, Env,
+    String, Vec,
 };
 
 // ============================================================================
 // Errors
 // ============================================================================
 
-#[contracttype]
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[contracterror]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum RegistryError {
     NotInitialized = 1,
     AlreadyInitialized = 2,
@@ -132,13 +133,6 @@ pub enum DataKey {
 }
 
 // ============================================================================
-// Event topic constants
-// ============================================================================
-
-const EVT_REGISTER: soroban_sdk::Symbol = symbol_short!("register");
-const EVT_UPDATE: soroban_sdk::Symbol = symbol_short!("update");
-
-// ============================================================================
 // Contract
 // ============================================================================
 
@@ -240,7 +234,7 @@ impl SolarRegistry {
         env.storage().instance().set(&DataKey::Index, &index);
 
         env.events().publish(
-            (EVT_REGISTER, array.id),
+            (symbol_short!("register"), array.id.clone()),
             (array.operator, array.rated_capacity_w),
         );
         Ok(())
@@ -290,7 +284,8 @@ impl SolarRegistry {
         env.storage()
             .persistent()
             .set(&DataKey::Array(id.clone()), &array);
-        env.events().publish((EVT_UPDATE, id), new_status);
+        env.events()
+            .publish((symbol_short!("update"), id), new_status);
         Ok(())
     }
 

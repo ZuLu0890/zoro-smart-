@@ -9,15 +9,15 @@
 //! can mint shares sold in a crowdfunding round.
 
 use soroban_sdk::{
-    contract, contractimpl, contracttype, symbol_short, Address, Env, String, Symbol,
+    contract, contracterror, contractimpl, contracttype, symbol_short, Address, Env, String, Symbol,
 };
 
 // ============================================================================
 // Errors
 // ============================================================================
 
-#[contracttype]
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[contracterror]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum TokenError {
     /// Contract has not yet been initialised.
     NotInitialized = 1,
@@ -82,15 +82,6 @@ pub enum DataKey {
     /// but RWA dashboards need to know it).
     TotalSupply,
 }
-
-// ============================================================================
-// Event topic constants
-// ============================================================================
-
-const EVT_MINT: soroban_sdk::Symbol = symbol_short!("mint");
-const EVT_BURN: soroban_sdk::Symbol = symbol_short!("burn");
-const EVT_TRANSFER: soroban_sdk::Symbol = symbol_short!("transfer");
-const EVT_APPROVE: soroban_sdk::Symbol = symbol_short!("approve");
 
 // ============================================================================
 // Contract
@@ -209,7 +200,10 @@ impl RwaToken {
         }
         from.require_auth();
         Self::move_balance(&env, &from, &to, amount)?;
-        env.events().publish((EVT_TRANSFER, from, to), amount);
+        env.events().publish(
+            (symbol_short!("transfer"), from.clone(), to.clone()),
+            amount,
+        );
         Ok(())
     }
 
@@ -226,11 +220,25 @@ impl RwaToken {
         if amount < 0 {
             return Err(TokenError::MathOverflow);
         }
+        let key = DataKey::Allowance(owner.clone(), spender.clone());
+        env.storage().persistent().set(&key, &amount);
+        // Keep the allowance entry alive at least until `expiration_ledger`.
+        // The minimum TTL is 17_280 ledgers (~1 day); the target is derived
+        // from `expiration_ledger` relative to the current ledger so the
+        // entry is evicted naturally once the approval expires.
+        let current = env.ledger().sequence();
+        let target: u32 = if expiration_ledger > current {
+            (expiration_ledger - current).max(17_280)
+        } else {
+            17_280u32
+        };
         env.storage()
             .persistent()
-            .set(&DataKey::Allowance(owner.clone(), spender.clone()), &amount);
-        env.events()
-            .publish((EVT_APPROVE, owner, spender), (amount, expiration_ledger));
+            .extend_ttl(&key, 17_280u32, target);
+        env.events().publish(
+            (symbol_short!("approve"), owner.clone(), spender.clone()),
+            (amount, expiration_ledger),
+        );
         Ok(())
     }
 
@@ -253,7 +261,10 @@ impl RwaToken {
         }
         env.storage().persistent().set(&key, &(allowance - amount));
         Self::move_balance(&env, &owner, &to, amount)?;
-        env.events().publish((EVT_TRANSFER, owner, to), amount);
+        env.events().publish(
+            (symbol_short!("transfer"), owner.clone(), to.clone()),
+            amount,
+        );
         Ok(())
     }
 
@@ -293,7 +304,8 @@ impl RwaToken {
         env.storage()
             .instance()
             .set(&DataKey::TotalSupply, &new_total);
-        env.events().publish((EVT_MINT, to), (operator, amount));
+        env.events()
+            .publish((symbol_short!("mint"), to.clone()), (operator, amount));
         Ok(())
     }
 
@@ -322,7 +334,8 @@ impl RwaToken {
         env.storage()
             .instance()
             .set(&DataKey::TotalSupply, &(total - amount));
-        env.events().publish((EVT_BURN, from), amount);
+        env.events()
+            .publish((symbol_short!("burn"), from.clone()), amount);
         Ok(())
     }
 
@@ -373,12 +386,16 @@ impl RwaToken {
             .persistent()
             .set(&DataKey::Balance(to.clone()), &new_to);
         // Touch a TTL key so balances persist.
-        env.storage()
-            .persistent()
-            .extend_ttl(&DataKey::Balance(from.clone()), 172_800, 7_776_000);
-        env.storage()
-            .persistent()
-            .extend_ttl(&DataKey::Balance(to.clone()), 172_800, 7_776_000);
+        env.storage().persistent().extend_ttl(
+            &DataKey::Balance(from.clone()),
+            172_800u32,
+            7_776_000u32,
+        );
+        env.storage().persistent().extend_ttl(
+            &DataKey::Balance(to.clone()),
+            172_800u32,
+            7_776_000u32,
+        );
         Ok(())
     }
 
@@ -386,8 +403,22 @@ impl RwaToken {
     // Version
     // --------------------------------------------------------------------
 
+    /// Return the contract semver as a Symbol. Dots are replaced with
+    /// underscores because Soroban Symbols only allow `[a-zA-Z0-9_]`.
     pub fn version() -> Symbol {
-        Symbol::new(&Env::default(), env!("CARGO_PKG_VERSION"))
+        // "0.1.0" -> "0_1_0"
+        const RAW: &str = env!("CARGO_PKG_VERSION");
+        // Build the symbol string at compile time by replacing '.' with '_'.
+        // We use a const-friendly approach: iterate and collect into a fixed buffer.
+        let mut buf = [0u8; 32];
+        let mut i = 0;
+        let bytes = RAW.as_bytes();
+        while i < bytes.len() && i < buf.len() {
+            buf[i] = if bytes[i] == b'.' { b'_' } else { bytes[i] };
+            i += 1;
+        }
+        let sym_str = core::str::from_utf8(&buf[..i]).unwrap_or("unknown");
+        Symbol::new(&Env::default(), sym_str)
     }
 }
 

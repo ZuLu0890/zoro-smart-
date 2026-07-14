@@ -23,6 +23,7 @@ export async function streamRoutes(app: FastifyInstance) {
     }
     const reader = (res.body as ReadableStream<Uint8Array>).getReader();
     reply.raw.writeHead(200);
+    // eslint-disable-next-line no-constant-condition
     while (true) {
       const { value, done } = await reader.read();
       if (done) {

@@ -14,14 +14,16 @@
 //! The pull-payment model avoids the O(N) iteration cost of push payments on
 //! every deposit, and lets holders claim when convenient.
 
-use soroban_sdk::{contract, contractimpl, contracttype, symbol_short, token, Address, Env};
+use soroban_sdk::{
+    contract, contracterror, contractimpl, contracttype, symbol_short, token, Address, Env,
+};
 
 // ============================================================================
 // Errors
 // ============================================================================
 
-#[contracttype]
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[contracterror]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum YieldError {
     NotInitialized = 1,
     AlreadyInitialized = 2,
@@ -33,6 +35,8 @@ pub enum YieldError {
     /// Nothing currently claimable for `holder`.
     NothingToClaim = 6,
     MathOverflow = 7,
+    /// The supplied amount was zero or negative.
+    ZeroAmount = 8,
 }
 
 impl From<YieldError> for soroban_sdk::Error {
@@ -86,14 +90,6 @@ pub enum DataKey {
 }
 
 // ============================================================================
-// Event topic constants
-// ============================================================================
-
-const EVT_INIT: soroban_sdk::Symbol = symbol_short!("init");
-const EVT_FUND: soroban_sdk::Symbol = symbol_short!("fund");
-const EVT_CLAIM: soroban_sdk::Symbol = symbol_short!("claim");
-
-// ============================================================================
 // Contract
 // ============================================================================
 
@@ -130,8 +126,10 @@ impl YieldDistributor {
             .set(&DataKey::YieldPerShare, &0i128);
         env.storage().instance().set(&DataKey::TotalClaimed, &0i128);
         env.storage().instance().set(&DataKey::LastFundedAt, &0u64);
-        env.events()
-            .publish((EVT_INIT,), (admin, funder, share_token, payment_token));
+        env.events().publish(
+            (symbol_short!("init"),),
+            (admin, funder, share_token, payment_token),
+        );
         Ok(())
     }
 
@@ -153,6 +151,15 @@ impl YieldDistributor {
             .ok_or(YieldError::NotInitialized)
     }
 
+    /// Return the permissioned funder address. Useful for the indexer and
+    /// the dashboard to show who is authorised to deposit revenue.
+    pub fn funder(env: Env) -> Result<Address, YieldError> {
+        env.storage()
+            .instance()
+            .get(&DataKey::Funder)
+            .ok_or(YieldError::NotInitialized)
+    }
+
     pub fn yield_per_share(env: Env) -> i128 {
         env.storage()
             .instance()
@@ -165,6 +172,16 @@ impl YieldDistributor {
             .instance()
             .get(&DataKey::LastFundedAt)
             .unwrap_or(0u64)
+    }
+
+    /// Return the aggregate amount of yield that has been claimed across
+    /// all holders since the contract was deployed. Useful for analytics
+    /// dashboards and indexer reconciliation.
+    pub fn total_claimed(env: Env) -> i128 {
+        env.storage()
+            .instance()
+            .get(&DataKey::TotalClaimed)
+            .unwrap_or(0i128)
     }
 
     // --------------------------------------------------------------------
@@ -216,7 +233,7 @@ impl YieldDistributor {
     /// already approved this contract to spend its payment token balance.
     pub fn fund(env: Env, amount: i128) -> Result<(), YieldError> {
         if amount <= 0 {
-            return Err(YieldError::MathOverflow);
+            return Err(YieldError::ZeroAmount);
         }
         let funder: Address = env
             .storage()
@@ -250,15 +267,15 @@ impl YieldDistributor {
             .instance()
             .get(&DataKey::YieldPerShare)
             .unwrap_or(0i128);
-        env.storage().instance().set(
-            &DataKey::YieldPerShare,
-            &yps.checked_add(yps_delta).ok_or(YieldError::MathOverflow)?,
-        );
+        let new_yps = yps.checked_add(yps_delta).ok_or(YieldError::MathOverflow)?;
+        env.storage()
+            .instance()
+            .set(&DataKey::YieldPerShare, &new_yps);
         env.storage()
             .instance()
             .set(&DataKey::LastFundedAt, &env.ledger().timestamp());
         env.events()
-            .publish((EVT_FUND, funder), (amount, yps + yps_delta));
+            .publish((symbol_short!("fund"),), (funder, amount, new_yps));
         Ok(())
     }
 
@@ -280,6 +297,13 @@ impl YieldDistributor {
         env.storage()
             .persistent()
             .set(&DataKey::PaidYieldPerShare(holder.clone()), &yps);
+        // Keep the per-holder ledger alive long enough to survive between
+        // revenue epochs (~90 days / 7_776_000 ledgers on Public Network).
+        env.storage().persistent().extend_ttl(
+            &DataKey::PaidYieldPerShare(holder.clone()),
+            172_800u32,
+            7_776_000u32,
+        );
 
         let payment_token = Self::payment_token(env.clone())?;
         let pay_client = token::TokenClient::new(&env, &payment_token);
@@ -297,7 +321,8 @@ impl YieldDistributor {
                 .ok_or(YieldError::MathOverflow)?,
         );
 
-        env.events().publish((EVT_CLAIM, holder), claimable);
+        env.events()
+            .publish((symbol_short!("claim"), holder.clone()), claimable);
         Ok(claimable)
     }
 

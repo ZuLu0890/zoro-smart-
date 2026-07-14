@@ -1,6 +1,11 @@
-use super::*;
-use soroban_sdk::testutils::Address as _;
-use soroban_sdk::{Address, BytesN, Env, String};
+#![cfg(test)]
+extern crate std;
+
+use crate::{
+    ArrayStatus, EnvironmentalImpact, GeoLocation, PanelTechnology, SolarArray, SolarRegistry,
+    SolarRegistryClient,
+};
+use soroban_sdk::{testutils::Address as _, Address, BytesN, Env, String};
 
 fn make_array(env: &Env, id: BytesN<32>, operator: Address) -> SolarArray {
     SolarArray {
