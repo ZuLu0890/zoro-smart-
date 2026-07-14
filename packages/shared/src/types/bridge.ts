@@ -56,11 +56,17 @@ export interface BridgeTransactionDetail extends BridgeTransaction {
   ledger: number;
   feeCharged?: string;
   memo?: string;
-  /**
-   * Optional pre-built Soroban operation that, if present, was the source
-   * for this wrap/unwrap record. Stored as `unknown` here to keep this
-   * shared DTO dependency-free; consumers in the API re-cast it to
-   * `xdr.Operation` if they need it.
-   */
   operation?: unknown;
+}
+
+export interface ChainInfo {
+  validators: string[];
+  threshold: number;
+  active: boolean;
+}
+
+export interface TokenAnalytics {
+  tokenAddress: string;
+  totalMinted: string;
+  totalBurned: string;
 }
