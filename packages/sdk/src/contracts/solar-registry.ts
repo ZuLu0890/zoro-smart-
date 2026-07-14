@@ -1,6 +1,6 @@
 import { ContractClient } from './contract-client.js';
 import type { SimulationAccount } from '../simulation-account.js';
-import type { SolarArraySummary } from '@solshare/shared';
+import type { SolarArraySummary, MaintenanceEvent } from '@solshare/shared';
 
 export class SolarRegistryContract {
   private readonly client: ContractClient;
@@ -67,8 +67,8 @@ export class SolarRegistryContract {
     return this.client.read<Record<number, number>>('array_count_by_status');
   }
 
-  async getMaintenanceLog(arrayId: string): Promise<any[]> {
-    return this.client.read<any[]>('get_maintenance_log', { array_id: arrayId });
+  async getMaintenanceLog(arrayId: string): Promise<MaintenanceEvent[]> {
+    return this.client.read<MaintenanceEvent[]>('get_maintenance_log', { array_id: arrayId });
   }
 
   buildStatusTransition(
