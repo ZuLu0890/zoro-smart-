@@ -12,7 +12,7 @@ export function Footer() {
         <div className="flex items-center gap-4">
           <Link to="/faq" className="hover:text-white transition-colors">FAQ</Link>
           <Link to="/docs" className="hover:text-white transition-colors">Docs</Link>
-          <span className="hidden md:inline">v0.1.0 · testnet</span>
+          <span className="hidden md:inline">v0.2.0 · testnet</span>
           <a
             className="inline-flex items-center gap-1 hover:text-white"
             href="https://github.com/solshare-network/solshare-network"
