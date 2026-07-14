@@ -229,7 +229,6 @@ impl BridgeWrapper {
         // Distinct validator signature count with ed25519 verification.
         let mut seen: Map<BytesN<32>, bool> = Map::new(&env);
         let mut distinct = 0u32;
-        let message_hash = Self::deposit_message_hash(&env, &deposit);
         for s in sigs.iter() {
             if !Self::is_authorised_validator(&validators, &s.validator) {
                 continue;
@@ -356,6 +355,7 @@ impl BridgeWrapper {
     /// source_token || sender || recipient || amount || nonce`. The byte
     /// ordering is little-endian for the numeric fields and raw for the
     /// byte arrays. The recipient address is hashed as its strkey string.
+    #[allow(dead_code)]
     fn deposit_message_hash(env: &Env, d: &DepositMessage) -> BytesN<32> {
         let mut buf = Bytes::new(env);
         buf.extend_from_slice(&d.chain_id.to_le_bytes());

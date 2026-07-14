@@ -1,7 +1,7 @@
 #![cfg(test)]
 
-use super::*;
-use soroban_sdk::{testutils::Address as _, Env, String};
+use crate::{YieldDistributor, YieldDistributorClient};
+use soroban_sdk::{testutils::Address as _, Address, Env, String};
 
 /// Register a fresh rwa-token contract, initialize it, and (optionally)
 /// mint to `holder`. Returns the deployed token's address so it can be
