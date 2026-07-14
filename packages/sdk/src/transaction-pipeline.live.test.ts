@@ -50,7 +50,7 @@ const LIVE = process.env.RUN_LIVE_TESTS === '1';
 // read-only calls like `name()`.
 const XLM_SAC_TESTNET =
   'CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC';
-const POLL_ATTEMPTS = 30;
+const POLL_ATTEMPTS = 60;
 const POLL_INTERVAL_MS = 1500;
 
 async function fetchWithRetry(
@@ -155,7 +155,7 @@ describe.skipIf(!LIVE)(
         }
       },
       // Friendbot (with backoff) + 30 polls × 1.5 s + RPC overhead.
-      120_000,
+      180_000,
     );
   },
 );
