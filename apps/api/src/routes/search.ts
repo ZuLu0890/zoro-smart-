@@ -1,6 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import { or, ilike } from 'drizzle-orm';
 import type { SearchResponse } from '@solshare/shared';
+import { getDb, arrays } from '../lib/db.js';
 import { getClient } from '../lib/stellar.js';
 import { cache } from '../lib/cache.js';
 
@@ -24,49 +26,69 @@ export async function searchRoutes(app: FastifyInstance) {
       const cached = await cache.get<SearchResponse>(cacheKey);
       if (cached) return cached;
 
-      const client = getClient();
       const start = Date.now();
+      const searchPattern = `%${q}%`;
+      const results: SearchResponse['results'] = [];
 
-      // Search across arrays via the registry.
-      const arrays = await client.registry.getAllArrays().catch(() => []);
-      const arrayResults = arrays
-        .filter(
-          (a) =>
-            a.name.toLowerCase().includes(q.toLowerCase()) ||
-            a.id.toLowerCase().includes(q.toLowerCase()) ||
-            a.operator.toLowerCase().includes(q.toLowerCase()),
-        )
-        .slice(0, limit)
-        .map((a) => ({
-          id: a.id,
-          type: 'array' as const,
-          title: a.name,
-          subtitle: `${a.ratedCapacityW}W · ${a.status}`,
-          url: `/arrays/${a.id}`,
-          status: a.status,
-          score: 0.9,
-        }));
+      // Search arrays via indexed Postgres ILIKE queries.
+      const includeArrays = typeList.length === 0 || typeList.includes('array');
+      if (includeArrays) {
+        const db = getDb();
+        const arrayRows = await db
+          .select({
+            id: arrays.id,
+            name: arrays.name,
+            operator: arrays.operator,
+            ratedCapacityW: arrays.ratedCapacityW,
+            status: arrays.status,
+          })
+          .from(arrays)
+          .where(
+            or(
+              ilike(arrays.name, searchPattern),
+              ilike(arrays.id, searchPattern),
+              ilike(arrays.operator, searchPattern),
+            ),
+          )
+          .limit(limit);
 
-      // Search proposals from governance.
-      const proposals = await client.governance.listProposals({ page: 1, pageSize: limit }).catch(() => ({ items: [], total: 0 }));
-      const proposalResults = proposals.items
-        .filter(
-          (p) =>
-            p.title.toLowerCase().includes(q.toLowerCase()) ||
-            p.description.toLowerCase().includes(q.toLowerCase()),
-        )
-        .slice(0, limit)
-        .map((p) => ({
-          id: p.id,
-          type: 'proposal' as const,
-          title: p.title,
-          subtitle: `By ${p.proposer.slice(0, 8)}… · ${p.status}`,
-          url: `/governance/${p.id}`,
-          status: p.status,
-          score: 0.7,
-        }));
+        for (const row of arrayRows) {
+          results.push({
+            id: row.id,
+            type: 'array',
+            title: row.name,
+            subtitle: `${Number(row.ratedCapacityW)}W · ${row.status}`,
+            url: `/arrays/${row.id}`,
+            status: row.status,
+            score: 0.9,
+          });
+        }
+      }
 
-      const results = [...arrayResults, ...proposalResults].slice(0, limit);
+      // Search proposals via governance SDK (governance not yet indexed in Postgres).
+      const includeProposals = typeList.length === 0 || typeList.includes('proposal');
+      const proposalSlots = limit - results.length;
+      if (includeProposals && proposalSlots > 0) {
+        const client = getClient();
+        const proposals = await client.governance.listProposals({ page: 1, pageSize: limit }).catch(() => ({ items: [], total: 0 }));
+        const matched = proposals.items
+          .filter(
+            (p) =>
+              p.title.toLowerCase().includes(q.toLowerCase()) ||
+              p.description.toLowerCase().includes(q.toLowerCase()),
+          )
+          .slice(0, proposalSlots)
+          .map((p) => ({
+            id: p.id,
+            type: 'proposal' as const,
+            title: p.title,
+            subtitle: `By ${p.proposer.slice(0, 8)}… · ${p.status}`,
+            url: `/governance/${p.id}`,
+            status: p.status,
+            score: 0.7,
+          }));
+        results.push(...matched);
+      }
 
       const resp: SearchResponse = {
         query: q,
