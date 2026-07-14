@@ -7,6 +7,9 @@ import type {
   GovernanceProposal,
   GovernanceStats,
   PortfolioSummary,
+  Notification,
+  NotificationCount,
+  Paginated as PaginatedType,
 } from '@solshare/shared';
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '/api';
@@ -76,4 +79,19 @@ export const api = {
     }),
   portfolio: (holder: string) =>
     request<PortfolioSummary>(`/portfolio?holder=${encodeURIComponent(holder)}`),
+  notifications: (params: { address: string; unreadOnly?: boolean; page?: number; pageSize?: number }) => {
+    const qs = new URLSearchParams();
+    qs.set('address', params.address);
+    if (params.unreadOnly) qs.set('unreadOnly', 'true');
+    if (params.page) qs.set('page', String(params.page));
+    if (params.pageSize) qs.set('pageSize', String(params.pageSize));
+    return request<PaginatedType<Notification>>(`/notifications?${qs.toString()}`);
+  },
+  notificationCount: (address: string) =>
+    request<NotificationCount>(`/notifications/count?address=${encodeURIComponent(address)}`),
+  markNotificationsRead: (body: { address: string; ids: string[]; markAll: boolean }) =>
+    request<{ status: string }>('/notifications/read', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
 };
